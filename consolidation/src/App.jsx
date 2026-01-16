@@ -1,5 +1,5 @@
-import React, { useState } from "react";
 import Papa from "papaparse"; // npm install papaparse
+import React, { useState, useRef } from "react";
 
 // Helper: parse "0/30" -> 30
 const parseTotes = (value) => {
@@ -20,6 +20,15 @@ const getColor = (totes) => {
 const App = () => {
   const [consignments, setConsignments] = useState([]);
   const [moves, setMoves] = useState([]);
+  const fileInputRef = useRef(null);
+
+  const handleClear = () => {
+    setConsignments([]);
+    setMoves([]);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -110,11 +119,7 @@ const App = () => {
     Object.entries(sectionsByShipment).forEach(([shipment, sections]) => {
       if (sections.length === 0) return;
 
-      // Work with a shallow copy
       const active = sections.map((s) => ({ ...s }));
-
-      // Try to reduce number of distinct consignments, but obey per-section ≤ 40
-      // Sort source sections by totes ascending (move smaller ones first)
       active.sort((a, b) => a.totes - b.totes);
 
       const usedSource = new Set();
@@ -123,22 +128,18 @@ const App = () => {
         const source = active[i];
         if (usedSource.has(source.sectionId)) continue;
 
-        // Only consider moves that change consignment
         for (let j = 0; j < active.length; j++) {
           if (i === j) continue;
           const target = active[j];
 
           if (target.consignment === source.consignment) continue;
-
-          // Section type must match (both ambient or both chill+freezer)
           if (target.type !== source.type) continue;
 
           const combined = target.totes + source.totes;
           if (combined <= maxPerSection) {
-            // valid move: section fits into target section without exceeding 40
             suggestions.push({
               shipment,
-              type: source.type,
+              type: source.type, // "ambient" or "chill"
               fromConsignment: source.consignment,
               toConsignment: target.consignment,
               fromSectionTotes: source.totes,
@@ -146,7 +147,6 @@ const App = () => {
               toSectionTotesAfter: combined,
             });
 
-            // apply merge in memory
             target.totes = combined;
             usedSource.add(source.sectionId);
             break;
@@ -158,19 +158,25 @@ const App = () => {
     return suggestions;
   };
 
+  // Split moves for display
+  const ambientMoves = moves.filter((m) => m.type === "ambient");
+  const chillMoves = moves.filter((m) => m.type === "chill");
+
   return (
-    <div style={{ padding: "16px", fontFamily: "sans-serif" }}>
-      <h2>Consignment Consolidation Tool</h2>
+  <div style={{ padding: "16px", fontFamily: "sans-serif" }}>
+    <h2>Consignment Consolidation Tool</h2>
 
-      <input
-        type="file"
-        accept=".csv"
-        onChange={handleFileChange}
-        style={{ marginBottom: "16px" }}
-      />
+    <input
+      type="file"
+      accept=".csv"
+      onChange={handleFileChange}
+      style={{ marginBottom: "16px" }}
+    />
 
-      {consignments.length > 0 && (
-        <>
+    {consignments.length > 0 && (
+      <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
+        {/* Consignment summary */}
+        <div>
           <h3>Consignment Summary</h3>
           <table
             border="1"
@@ -209,30 +215,75 @@ const App = () => {
               ))}
             </tbody>
           </table>
+        </div>
 
-          <h3>Section Move Suggestions</h3>
-          {moves.length === 0 ? (
-            <p>
-              No valid section moves found that keep each section at or below 40
-              totes.
-            </p>
+        {/* Ambient moves table */}
+        <div>
+          <h3>Ambient section</h3>
+          {ambientMoves.length === 0 ? (
+            <p>No ambient section moves that keep each section ≤ 40 totes.</p>
           ) : (
-            <ul>
-              {moves.map((m, idx) => (
-                <li key={idx}>
-                  Shipment {m.shipment}: move {m.type} section with{" "}
-                  {m.fromSectionTotes} totes from consignment{" "}
-                  {m.fromConsignment} to consignment {m.toConsignment} (target
-                  section {m.toSectionTotesBefore} → {m.toSectionTotesAfter} totes,
-                  max 40).
-                </li>
-              ))}
-            </ul>
+            <table
+              border="1"
+              cellPadding="4"
+              cellSpacing="0"
+              style={{ borderCollapse: "collapse", marginBottom: "16px" }}
+            >
+              <thead>
+                <tr>
+                  <th>Source consignment</th>
+                  <th>Destination consignment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ambientMoves.map((m, idx) => (
+                  <tr key={idx}>
+                    <td>{m.fromConsignment}</td>
+                    <td>{m.toConsignment}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
-        </>
-      )}
-    </div>
-  );
+        </div>
+
+        {/* Chill moves table */}
+        <div>
+          <h3>Chill section</h3>
+          {chillMoves.length === 0 ? (
+            <p>No chill section moves that keep each section ≤ 40 totes.</p>
+          ) : (
+            <table
+              border="1"
+              cellPadding="4"
+              cellSpacing="0"
+              style={{ borderCollapse: "collapse" }}
+            >
+              <thead>
+                <tr>
+                  <th>Source consignment</th>
+                  <th>Destination consignment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {chillMoves.map((m, idx) => (
+                  <tr key={idx}>
+                    <td>{m.fromConsignment}</td>
+                    <td>{m.toConsignment}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    )}
+
+<button onClick={handleClear}>Clear</button>
+
+  </div>
+);
+
 };
 
 export default App;
