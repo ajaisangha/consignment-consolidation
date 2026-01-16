@@ -165,111 +165,113 @@ const App = () => {
 
   return (
     <div className="app">
-      <header className="app-header">
-        <h1>Consignment Consolidation Tool</h1>
-        <p className="app-subtitle">
-          Upload a CSV file to view consignment loads and suggested section moves.
-        </p>
-      </header>
+      <div className="app-inner">
+        <header className="app-header">
+          <h1>Consignment Consolidation Tool</h1>
+          <p className="app-subtitle">
+            Upload a CSV file to view consignment loads and suggested section moves.
+          </p>
+        </header>
 
-      <div className="controls">
-        <input
-          type="file"
-          accept=".csv"
-          onChange={handleFileChange}
-          ref={fileInputRef}
-        />
-        <button className="btn btn-secondary" onClick={handleClear}>
-          Clear
-        </button>
-      </div>
-
-      {consignments.length > 0 && (
-        <div className="panels">
-          {/* Consignment summary */}
-          <div className="panel">
-            <h3>Consignment Summary</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Shipment</th>
-                  <th>Consignment</th>
-                  <th>Ambient totes</th>
-                  <th>Chill+Freezer totes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {consignments.map((c) => (
-                  <tr key={c.id}>
-                    <td>{c.shipment}</td>
-                    <td>{c.consignment}</td>
-                    <td className={`tote ${getColorClass(c.ambientTotes)}`}>
-                      {c.ambientTotes}
-                    </td>
-                    <td className={`tote ${getColorClass(c.chillTotes)}`}>
-                      {c.chillTotes}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Ambient moves table */}
-          <div className="panel">
-            <h3>Ambient section</h3>
-            {ambientMoves.length === 0 ? (
-              <p className="empty-text">
-                No ambient section moves that keep each section ≤ 40 totes.
-              </p>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Source consignment</th>
-                    <th>Destination consignment</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ambientMoves.map((m, idx) => (
-                    <tr key={idx}>
-                      <td>{m.fromConsignment}</td>
-                      <td>{m.toConsignment}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          {/* Chill moves table */}
-          <div className="panel">
-            <h3>Chill section</h3>
-            {chillMoves.length === 0 ? (
-              <p className="empty-text">
-                No chill section moves that keep each section ≤ 40 totes.
-              </p>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>Source consignment</th>
-                    <th>Destination consignment</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {chillMoves.map((m, idx) => (
-                    <tr key={idx}>
-                      <td>{m.fromConsignment}</td>
-                      <td>{m.toConsignment}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
+        <div className="controls">
+          <input
+            type="file"
+            accept=".csv"
+            onChange={handleFileChange}
+            ref={fileInputRef}
+          />
+          <button className="btn btn-secondary" onClick={handleClear}>
+            Clear
+          </button>
         </div>
-      )}
+
+        {consignments.length > 0 && (
+          <div className="panels">
+            {/* Consignment summary */}
+            <div className="panel">
+              <h3>Consignment Summary</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Shipment</th>
+                    <th>Consignment</th>
+                    <th>Ambient totes</th>
+                    <th>Chill+Freezer totes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {consignments.map((c) => (
+                    <tr key={c.id}>
+                      <td>{c.shipment}</td>
+                      <td>{c.consignment}</td>
+                      <td className={`tote ${getColorClass(c.ambientTotes)}`}>
+                        {c.ambientTotes}
+                      </td>
+                      <td className={`tote ${getColorClass(c.chillTotes)}`}>
+                        {c.chillTotes}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Ambient moves table */}
+            <div className="panel">
+              <h3>Ambient section</h3>
+              {ambientMoves.length === 0 ? (
+                <p className="empty-text">
+                  No ambient section moves that keep each section ≤ 40 totes.
+                </p>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Source consignment</th>
+                      <th>Destination consignment</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ambientMoves.map((m, idx) => (
+                      <tr key={idx}>
+                        <td>{m.fromConsignment}</td>
+                        <td>{m.toConsignment}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Chill moves table */}
+            <div className="panel">
+              <h3>Chill section</h3>
+              {chillMoves.length === 0 ? (
+                <p className="empty-text">
+                  No chill section moves that keep each section ≤ 40 totes.
+                </p>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Source consignment</th>
+                      <th>Destination consignment</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {chillMoves.map((m, idx) => (
+                      <tr key={idx}>
+                        <td>{m.fromConsignment}</td>
+                        <td>{m.toConsignment}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
