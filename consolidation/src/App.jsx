@@ -21,6 +21,7 @@ const getColorClass = (totes) => {
 const App = () => {
   const [consignments, setConsignments] = useState([]);
   const [moves, setMoves] = useState([]);
+  // groups: { 1: [{consignmentId, type}], ... }
   const [groups, setGroups] = useState({
     1: [],
     2: [],
@@ -28,81 +29,71 @@ const App = () => {
     4: [],
     5: [],
   });
-  const [draggedConsignment, setDraggedConsignment] = useState(null);
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [pendingGroup, setPendingGroup] = useState(null);
-  const [assignedTypes, setAssignedTypes] = useState({}); // { "consignment-group": "ambient|chill" }
+  // draggedSection: { id, type } where type = 'ambient' | 'chill'
+  const [draggedSection, setDraggedSection] = useState(null);
   const fileInputRef = useRef(null);
 
   const handleClear = () => {
     setConsignments([]);
     setMoves([]);
     setGroups({ 1: [], 2: [], 3: [], 4: [], 5: [] });
-    setDraggedConsignment(null);
-    setShowConfirmDialog(false);
-    setPendingGroup(null);
-    setAssignedTypes({});
+    setDraggedSection(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
 
+  // Start dragging a specific section of a consignment
   const handleDragStart = (consignmentId, sectionType) => {
-    // FIXED: Check section-specific assignment, not consignment-level
-    const isSectionAssigned = Object.entries(groups).some(([groupNum, group]) => {
-      const key = `${consignmentId}-${groupNum}`;
-      const assignmentType = assignedTypes[key];
-      return group.includes(consignmentId) && assignmentType === sectionType;
-    });
-    
-    if (isSectionAssigned) return;
-    setDraggedConsignment({ id: consignmentId, type: sectionType });
+    setDraggedSection({ id: consignmentId, type: sectionType });
   };
 
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  // Drop into group: auto-assign; each section type can only belong to ONE group
   const handleDropOnGroup = (groupNumber) => {
-    if (!draggedConsignment) return;
-    setPendingGroup(groupNumber);
-    setShowConfirmDialog(true);
-  };
-
-  const handleConfirmAssignment = (type) => {
-    if (!draggedConsignment || !pendingGroup) return;
-
-    const { id: consignmentId } = draggedConsignment;
+    if (!draggedSection) return;
+    const { id, type } = draggedSection;
 
     setGroups((prev) => {
-      if (prev[pendingGroup].includes(consignmentId)) return prev;
-      const updated = { ...prev };
-      updated[pendingGroup] = [...updated[pendingGroup], consignmentId];
-      return updated;
+      // Remove this section type from any existing group first
+      const cleaned = Object.fromEntries(
+        Object.entries(prev).map(([gNum, items]) => [
+          gNum,
+          items.filter(
+            (item) => !(item.consignmentId === id && item.type === type)
+          ),
+        ])
+      );
+
+      // Add to target group (if not already there with same type)
+      const targetItems = cleaned[groupNumber];
+      const alreadyThere = targetItems.some(
+        (item) => item.consignmentId === id && item.type === type
+      );
+      if (!alreadyThere) {
+        cleaned[groupNumber] = [
+          ...targetItems,
+          { consignmentId: id, type },
+        ];
+      }
+
+      return cleaned;
     });
 
-    setAssignedTypes((prev) => ({
-      ...prev,
-      [`${consignmentId}-${pendingGroup}`]: type,
-    }));
-
-    setShowConfirmDialog(false);
-    setPendingGroup(null);
-    setDraggedConsignment(null);
+    setDraggedSection(null);
   };
 
   const handleRemoveFromGroup = (consignmentId, groupNumber) => {
     setGroups((prev) => {
       const updated = { ...prev };
-      updated[groupNumber] = updated[groupNumber].filter(id => id !== consignmentId);
+      updated[groupNumber] = updated[groupNumber].filter(
+        (item) => item.consignmentId !== consignmentId
+      );
       return updated;
     });
-
-    setAssignedTypes((prev) => {
-      const updated = { ...prev };
-      delete updated[`${consignmentId}-${groupNumber}`];
-      return updated;
-    });
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
   };
 
   const handleFileChange = (e) => {
@@ -122,11 +113,12 @@ const App = () => {
         const moveSuggestions = suggestSectionMoves(sectionsByShipment);
         setMoves(moveSuggestions);
         setGroups({ 1: [], 2: [], 3: [], 4: [], 5: [] });
-        setAssignedTypes({});
+        setDraggedSection(null);
       },
     });
   };
 
+  // Build consignments and sections
   const buildConsignmentsAndSections = (data) => {
     const consMap = {};
     const sectionsByShipment = {};
@@ -182,6 +174,7 @@ const App = () => {
     };
   };
 
+  // Moves suggestion (unchanged)
   const suggestSectionMoves = (sectionsByShipment) => {
     const suggestions = [];
     const maxPerSection = 40;
@@ -231,18 +224,22 @@ const App = () => {
   const ambientMoves = moves.filter((m) => m.type === "ambient");
   const chillMoves = moves.filter((m) => m.type === "chill");
 
-  const getAssignmentStatus = (consignment, groupNum) => {
-    const key = `${consignment}-${groupNum}`;
-    return assignedTypes[key];
+  // Check if a consignment has its ambient/chill used in ANY group
+  const isSectionUsedAnywhere = (consignmentId, sectionType) => {
+    return Object.values(groups).some((items) =>
+      items.some(
+        (item) =>
+          item.consignmentId === consignmentId && item.type === sectionType
+      )
+    );
   };
 
-  // FIXED: Check section-specific assignment
-  const isSectionAssigned = (consignment, sectionType) => {
-    return Object.entries(groups).some(([groupNum, group]) => {
-      const key = `${consignment}-${groupNum}`;
-      const assignmentType = assignedTypes[key];
-      return group.includes(consignment) && assignmentType === sectionType;
-    });
+  // For groups UI: get type for a consignment in a specific group
+  const getTypeInGroup = (consignmentId, groupNum) => {
+    const entry = groups[groupNum].find(
+      (item) => item.consignmentId === consignmentId
+    );
+    return entry ? entry.type : null;
   };
 
   return (
@@ -268,67 +265,137 @@ const App = () => {
         </div>
 
         {consignments.length > 0 && (
-          <div className="main-content">
-            {/* TOP ROW: Consignment Summary + Consolidation Groups */}
-            <div className="top-row">
-              <div className="panel summary-group">
-                <div className="panel-content">
-                  <h3>Consignment Summary</h3>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Shipment</th>
-                        <th>Consignment</th>
-                        <th>Ambient totes</th>
-                        <th>Chill+Freezer totes</th>
+          <div className="layout-row">
+            {/* 1st card: Consignment Summary */}
+            <div className="card card-summary">
+              <h3>Consignment Summary</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Shipment</th>
+                    <th>Consignment</th>
+                    <th>Ambient totes</th>
+                    <th>Chill+Freezer totes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {consignments.map((c) => {
+                    const ambientUsed = isSectionUsedAnywhere(
+                      c.consignment,
+                      "ambient"
+                    );
+                    const chillUsed = isSectionUsedAnywhere(
+                      c.consignment,
+                      "chill"
+                    );
+
+                    return (
+                      <tr key={c.id}>
+                        <td>{c.shipment}</td>
+                        <td className="consignment-cell">
+                          {c.consignment}
+                          {(ambientUsed || chillUsed) && (
+                            <span className="assigned-badge">✓</span>
+                          )}
+                        </td>
+
+                        <td
+                          className={`tote ${getColorClass(
+                            c.ambientTotes
+                          )} ${ambientUsed ? "assigned" : ""}`}
+                          draggable
+                          onDragStart={() =>
+                            handleDragStart(c.consignment, "ambient")
+                          }
+                          title="Drag ambient section to a group"
+                          style={{ cursor: "grab" }}
+                        >
+                          {c.ambientTotes}
+                          {ambientUsed && <span className="tick-mark">✓</span>}
+                        </td>
+
+                        <td
+                          className={`tote ${getColorClass(
+                            c.chillTotes
+                          )} ${chillUsed ? "assigned" : ""}`}
+                          draggable
+                          onDragStart={() =>
+                            handleDragStart(c.consignment, "chill")
+                          }
+                          title="Drag chill section to a group"
+                          style={{ cursor: "grab" }}
+                        >
+                          {c.chillTotes}
+                          {chillUsed && <span className="tick-mark">✓</span>}
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {consignments.map((c) => {
-                        const hasAmbientAssignment = [1,2,3,4,5].some(g => getAssignmentStatus(c.consignment, g) === 'ambient');
-                        const hasChillAssignment = [1,2,3,4,5].some(g => getAssignmentStatus(c.consignment, g) === 'chill');
-                        const ambientAssigned = isSectionAssigned(c.consignment, 'ambient');
-                        const chillAssigned = isSectionAssigned(c.consignment, 'chill');
-                        
-                        return (
-                          <tr key={c.id}>
-                            <td>{c.shipment}</td>
-                            <td className="consignment-cell">
-                              {c.consignment}
-                              {(ambientAssigned || chillAssigned) && <span className="assigned-badge">✓</span>}
-                            </td>
-                            <td 
-                              className={`tote ${getColorClass(c.ambientTotes)} ${hasAmbientAssignment ? 'assigned' : ''}`}
-                              draggable={!ambientAssigned}
-                              onDragStart={!ambientAssigned ? () => handleDragStart(c.consignment, 'ambient') : undefined}
-                              title={!ambientAssigned ? "Drag ambient section to group" : "Ambient section assigned"}
-                              style={{ cursor: ambientAssigned ? 'default' : 'grab' }}
-                            >
-                              {c.ambientTotes}
-                              {hasAmbientAssignment && <span className="tick-mark">✓</span>}
-                            </td>
-                            <td 
-                              className={`tote ${getColorClass(c.chillTotes)} ${hasChillAssignment ? 'assigned' : ''}`}
-                              draggable={!chillAssigned}
-                              onDragStart={!chillAssigned ? () => handleDragStart(c.consignment, 'chill') : undefined}
-                              title={!chillAssigned ? "Drag chill section to group" : "Chill section assigned"}
-                              style={{ cursor: chillAssigned ? 'default' : 'grab' }}
-                            >
-                              {c.chillTotes}
-                              {hasChillAssignment && <span className="tick-mark">✓</span>}
-                            </td>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 2nd card: Ambient + Chill + Groups */}
+            <div className="card card-right">
+              <div className="top-two">
+                <div className="panel">
+                  <h3>Ambient section</h3>
+                  {ambientMoves.length === 0 ? (
+                    <p className="empty-text">
+                      No ambient section moves that keep each section ≤ 40 totes.
+                    </p>
+                  ) : (
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Source consignment</th>
+                          <th>Destination consignment</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ambientMoves.map((m, idx) => (
+                          <tr key={idx}>
+                            <td>{m.fromConsignment}</td>
+                            <td>{m.toConsignment}</td>
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                <div className="panel">
+                  <h3>Chill section</h3>
+                  {chillMoves.length === 0 ? (
+                    <p className="empty-text">
+                      No chill section moves that keep each section ≤ 40 totes.
+                    </p>
+                  ) : (
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Source consignment</th>
+                          <th>Destination consignment</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {chillMoves.map((m, idx) => (
+                          <tr key={idx}>
+                            <td>{m.fromConsignment}</td>
+                            <td>{m.toConsignment}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
 
-              <div className="panel grouping-panel">
+              <div className="panel groups-panel">
                 <h3>Consolidation Groups (Max 5)</h3>
                 <p className="grouping-subtitle">
-                  Drag consignment sections above into groups. Click ✕ to remove.
+                  Drag ambient/chill sections from the summary into groups. Each
+                  section can be in only one group. Click ✕ to remove.
                 </p>
                 <div className="groups-row">
                   {[1, 2, 3, 4, 5].map((num) => (
@@ -343,113 +410,36 @@ const App = () => {
                         <div className="group-empty">Drop here</div>
                       ) : (
                         <ul className="group-list">
-                          {groups[num].map((consId, idx) => {
-                            const type = getAssignmentStatus(consId, num);
-                            return (
-                              <li key={`${consId}-${idx}`} className={`group-item ${type || ''}`}>
-                                <span className="group-item-content">
-                                  {consId} {type && <span className="group-type">({type})</span>}
+                          {groups[num].map((item, idx) => (
+                            <li
+                              key={`${item.consignmentId}-${item.type}-${idx}`}
+                              className={`group-item ${item.type}`}
+                            >
+                              <span className="group-item-content">
+                                {item.consignmentId}{" "}
+                                <span className="group-type">
+                                  ({item.type})
                                 </span>
-                                <button
-                                  className="remove-btn"
-                                  onClick={() => handleRemoveFromGroup(consId, num)}
-                                  title="Remove from group"
-                                >
-                                  ✕
-                                </button>
-                              </li>
-                            );
-                          })}
+                              </span>
+                              <button
+                                className="remove-btn"
+                                onClick={() =>
+                                  handleRemoveFromGroup(
+                                    item.consignmentId,
+                                    num
+                                  )
+                                }
+                                title="Remove from group"
+                              >
+                                ✕
+                              </button>
+                            </li>
+                          ))}
                         </ul>
                       )}
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
-
-            {/* BOTTOM ROW: Ambient + Chill sections */}
-            <div className="bottom-row">
-              <div className="panel">
-                <h3>Ambient section</h3>
-                {ambientMoves.length === 0 ? (
-                  <p className="empty-text">
-                    No ambient section moves that keep each section ≤ 40 totes.
-                  </p>
-                ) : (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Source consignment</th>
-                        <th>Destination consignment</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ambientMoves.map((m, idx) => (
-                        <tr key={idx}>
-                          <td>{m.fromConsignment}</td>
-                          <td>{m.toConsignment}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-
-              <div className="panel">
-                <h3>Chill section</h3>
-                {chillMoves.length === 0 ? (
-                  <p className="empty-text">
-                    No chill section moves that keep each section ≤ 40 totes.
-                  </p>
-                ) : (
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Source consignment</th>
-                        <th>Destination consignment</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {chillMoves.map((m, idx) => (
-                        <tr key={idx}>
-                          <td>{m.fromConsignment}</td>
-                          <td>{m.toConsignment}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* CONFIRMATION DIALOG */}
-        {showConfirmDialog && draggedConsignment && pendingGroup && (
-          <div className="confirm-dialog-overlay">
-            <div className="confirm-dialog">
-              <h4>Assign to Group {pendingGroup}</h4>
-              <p>Consignment: <strong>{draggedConsignment.id}</strong></p>
-              <p>Section: <strong>{draggedConsignment.type}</strong></p>
-              <p>Confirm assignment?</p>
-              <div className="confirm-buttons">
-                <button 
-                  className="btn btn-primary" 
-                  onClick={() => handleConfirmAssignment(draggedConsignment.type)}
-                >
-                  Assign ✓
-                </button>
-                <button 
-                  className="btn btn-cancel" 
-                  onClick={() => {
-                    setShowConfirmDialog(false);
-                    setPendingGroup(null);
-                    setDraggedConsignment(null);
-                  }}
-                >
-                  Cancel
-                </button>
               </div>
             </div>
           </div>

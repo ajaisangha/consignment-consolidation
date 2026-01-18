@@ -13,40 +13,6 @@
   max-width: 1400px;
 }
 
-.main-content {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-/* TOP ROW: Consignment Summary + Groups */
-.top-row {
-  display: flex;
-  gap: 32px;
-  align-items: flex-start;
-  justify-content: center;
-}
-
-.summary-group {
-  flex: 1.4;
-  min-width: 380px;
-}
-
-.grouping-panel {
-  flex: 1;
-  min-width: 300px;
-  max-height: 500px;
-  overflow-y: auto;
-}
-
-/* BOTTOM ROW: Ambient + Chill */
-.bottom-row {
-  display: flex;
-  gap: 32px;
-  align-items: flex-start;
-  justify-content: center;
-}
-
 .app-header {
   margin-bottom: 16px;
   text-align: center;
@@ -85,16 +51,6 @@
   font-weight: 500;
 }
 
-.btn-primary {
-  background-color: #10b981;
-  color: white;
-  border-color: #059669;
-}
-
-.btn-primary:hover {
-  background-color: #059669;
-}
-
 .btn-secondary {
   background-color: #e5e7eb;
   color: #111827;
@@ -105,42 +61,55 @@
   background-color: #d1d5db;
 }
 
-.btn-cancel {
-  background-color: #ef4444;
-  color: white;
-  border-color: #dc2626;
+/* Main two-card layout */
+.layout-row {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+  justify-content: center;
 }
 
-.btn-cancel:hover {
-  background-color: #dc2626;
-}
-
-.panel, .summary-group, .grouping-panel {
+.card {
   background-color: #ffffff;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
   padding: 20px;
 }
 
-.panel-content {
-  height: 100%;
+.card-summary {
+  flex: 1.2;
+  min-width: 420px;
+}
+
+.card-right {
+  flex: 1.4;
+  min-width: 480px;
   display: flex;
   flex-direction: column;
+  gap: 16px;
 }
 
-.panel h3, .summary-group h3, .grouping-panel h3 {
-  font-size: 1.1rem;
-  margin: 0 0 12px;
-  color: #111827;
-  text-align: center;
+/* Top two panels in right card */
+.top-two {
+  display: flex;
+  gap: 16px;
 }
 
+.top-two .panel {
+  flex: 1;
+}
+
+/* Groups panel at bottom of right card */
+.groups-panel {
+  margin-top: 8px;
+}
+
+/* Tables */
 table {
   border-collapse: separate;
   border-spacing: 6px 6px;
   margin-top: 8px;
   width: 100%;
-  flex-grow: 1;
 }
 
 th,
@@ -163,12 +132,13 @@ tr:nth-child(even) td {
   background-color: #f9fafb;
 }
 
+/* Tote colors */
 .tote.green { background-color: #c6f6d5; }
 .tote.orange { background-color: #fbd38d; }
 .tote.red { background-color: #feb2b2; }
 
+/* Ticks and assigned styles */
 .tote.assigned {
-  position: relative;
   border: 2px solid #10b981;
 }
 
@@ -182,13 +152,7 @@ tr:nth-child(even) td {
 }
 
 .consignment-cell {
-  transition: all 0.2s ease;
-}
-
-.consignment-cell.assigned {
-  background-color: #dcfce7 !important;
-  font-weight: 600;
-  border-left: 4px solid #10b981;
+  position: relative;
 }
 
 .assigned-badge {
@@ -207,20 +171,21 @@ tr:nth-child(even) td {
   font-weight: bold;
 }
 
-.draggable-consignment {
+/* Draggable styling (ambient/chill cells) */
+.tote[draggable="true"] {
   cursor: grab;
-  font-weight: 500;
 }
 
-.draggable-consignment:active {
+.tote[draggable="true"]:active {
   cursor: grabbing;
   background-color: #dbeafe !important;
 }
 
-.draggable-consignment:hover {
+.tote[draggable="true"]:hover {
   background-color: #f0f9ff;
 }
 
+/* Empty text */
 .empty-text {
   font-size: 0.9rem;
   color: #6b7280;
@@ -231,6 +196,7 @@ tr:nth-child(even) td {
   border-radius: 4px;
 }
 
+/* Grouping section inside right card */
 .grouping-subtitle {
   font-size: 0.85rem;
   text-align: center;
@@ -243,7 +209,6 @@ tr:nth-child(even) td {
   gap: 12px;
   justify-content: center;
   flex-wrap: wrap;
-  flex-grow: 1;
 }
 
 .group-card {
@@ -288,7 +253,7 @@ tr:nth-child(even) td {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 200px;
+  max-height: 180px;
   overflow-y: auto;
 }
 
@@ -342,54 +307,24 @@ tr:nth-child(even) td {
   transform: scale(1.1);
 }
 
-.confirm-dialog-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-
-.confirm-dialog {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  max-width: 400px;
-  width: 90%;
-  box-shadow: 0 20px 25px -5px rgba(0, 0,0, 0.1);
-  text-align: center;
-}
-
-.confirm-dialog h4 {
-  margin: 0 0 12px;
-  color: #111827;
-}
-
-.confirm-dialog p {
-  margin: 0 0 20px;
-  color: #374151;
-}
-
-.confirm-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
+/* Responsive */
 @media (max-width: 1024px) {
-  .top-row, .bottom-row {
+  .layout-row {
     flex-direction: column;
-    gap: 20px;
+  }
+
+  .card-summary,
+  .card-right {
+    min-width: 100%;
   }
 }
 
 @media (max-width: 768px) {
   .app {
     padding: 10px;
+  }
+
+  .top-two {
+    flex-direction: column;
   }
 }
