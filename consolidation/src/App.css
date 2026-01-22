@@ -99,7 +99,7 @@
   flex: 1;
 }
 
-/* Groups panel at bottom of right card */
+/* Routes panel at bottom of right card */
 .groups-panel {
   margin-top: 8px;
 }
@@ -196,7 +196,7 @@ tr:nth-child(even) td {
   border-radius: 4px;
 }
 
-/* Grouping section inside right card */
+/* Generic small subtitle text */
 .grouping-subtitle {
   font-size: 0.85rem;
   text-align: center;
@@ -204,88 +204,118 @@ tr:nth-child(even) td {
   margin-bottom: 16px;
 }
 
-.groups-row {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
+/* ===== Routes layout styles ===== */
 
-.group-card {
-  background-color: #f8fafc;
-  border: 2px dashed #cbd5e1;
-  border-radius: 8px;
-  padding: 12px;
-  min-width: 100px;
-  min-height: 80px;
+.routes-column {
   display: flex;
   flex-direction: column;
-  transition: all 0.2s ease;
-  flex: 1;
+  gap: 12px;
 }
 
-.group-card:hover {
-  border-color: #3b82f6;
-  background-color: #eff6ff;
+.route-card {
+  background-color: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #dbeafe;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.group-header {
-  font-size: 0.9rem;
+.route-header {
+  font-size: 0.95rem;
   font-weight: 700;
-  margin-bottom: 8px;
-  text-align: center;
-  color: #1e40af;
+  color: #1d4ed8;
+  margin-bottom: 4px;
 }
 
-.group-empty {
+.route-subroutes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.subroute-card {
+  background-color: #ffffff;
+  border-radius: 6px;
+  border: 1px dashed #cbd5e1;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.subroute-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+/* FROM / TO slots */
+.subroute-slot {
+  border-radius: 6px;
+  border: 1px dashed #cbd5e1;
+  padding: 8px;
+  background-color: #f9fafb;
+  min-height: 40px;
+}
+
+.from-slot {
+  border-color: #4ade80;
+}
+
+.to-slot {
+  border-color: #60a5fa;
+}
+
+.slot-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 4px;
+}
+
+.slot-empty {
   font-size: 0.8rem;
-  color: #94a3b8;
-  text-align: center;
-  margin-top: 4px;
+  color: #9ca3af;
   font-style: italic;
 }
 
-.group-list {
+.slot-list {
   list-style: none;
   padding: 0;
   margin: 0;
-  flex-grow: 1;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 180px;
-  overflow-y: auto;
 }
 
-.group-item {
+/* Items in FROM / TO slots */
+.slot-item {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 6px;
   font-size: 0.8rem;
-  padding: 6px 8px;
+  padding: 4px 8px;
   border-radius: 4px;
-  background-color: #e2e8f0;
-  border-left: 3px solid #3b82f6;
-  font-weight: 500;
+  background-color: #e5e7eb;
 }
 
-.group-item.ambient {
-  border-left-color: #10b981;
+.slot-item.from {
+  border-left: 3px solid #4ade80;
 }
 
-.group-item.chill {
-  border-left-color: #f59e0b;
+.slot-item.ambient {
+  border-left: 3px solid #10b981;
 }
 
-.group-item-content {
-  flex: 1;
+.slot-item.chill {
+  border-left: 3px solid #f59e0b;
 }
 
-.group-type {
-  font-size: 0.7rem;
-  opacity: 0.8;
-}
-
+/* Reuse remove button for route items */
 .remove-btn {
   background: #ef4444;
   color: white;

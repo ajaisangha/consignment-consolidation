@@ -18,26 +18,32 @@ const getColorClass = (totes) => {
   return "red";
 };
 
+// Route structure:
+// routes = [
+//   {
+//     id: 1,
+//     subRoutes: [
+//       { id: 1, from: {consignmentId,type} | null, tos: [{consignmentId,type}] },
+//       { id: 2, from: {...}|null, tos: [...] }
+//     ]
+//   },
+//   ...
+// ]
+
 const App = () => {
   const [consignments, setConsignments] = useState([]);
   const [moves, setMoves] = useState([]);
-  // groups: { 1: [{consignmentId, type}], ... }
-  const [groups, setGroups] = useState({
-    1: [],
-    2: [],
-    3: [],
-    4: [],
-    5: [],
-  });
-  // draggedSection: { id, type } where type = 'ambient' | 'chill'
-  const [draggedSection, setDraggedSection] = useState(null);
+  const [routes, setRoutes] = useState([]);
+  const [draggedSection, setDraggedSection] = useState(null); // {id, type}
+  const [routesNeeded, setRoutesNeeded] = useState(0);
   const fileInputRef = useRef(null);
 
   const handleClear = () => {
     setConsignments([]);
     setMoves([]);
-    setGroups({ 1: [], 2: [], 3: [], 4: [], 5: [] });
+    setRoutes([]);
     setDraggedSection(null);
+    setRoutesNeeded(0);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -52,48 +58,116 @@ const App = () => {
     e.preventDefault();
   };
 
-  // Drop into group: auto-assign; each section type can only belong to ONE group
-  const handleDropOnGroup = (groupNumber) => {
+  // Utility – remove this section from all routes before placing it
+  const removeSectionFromRoutes = (routesState, consId, type) => {
+    return routesState.map((r) => ({
+      ...r,
+      subRoutes: r.subRoutes.map((sr) => ({
+        ...sr,
+        from:
+          sr.from &&
+          sr.from.consignmentId === consId &&
+          sr.from.type === type
+            ? null
+            : sr.from,
+        tos: sr.tos.filter(
+          (t) => !(t.consignmentId === consId && t.type === type)
+        ),
+      })),
+    }));
+  };
+
+  // Drop into a "from" slot
+  const handleDropOnFrom = (routeId, subRouteId) => {
     if (!draggedSection) return;
     const { id, type } = draggedSection;
 
-    setGroups((prev) => {
-      // Remove this section type from any existing group first
-      const cleaned = Object.fromEntries(
-        Object.entries(prev).map(([gNum, items]) => [
-          gNum,
-          items.filter(
-            (item) => !(item.consignmentId === id && item.type === type)
-          ),
-        ])
-      );
+    setRoutes((prev) => {
+      let updated = removeSectionFromRoutes(prev, id, type);
 
-      // Add to target group (if not already there with same type)
-      const targetItems = cleaned[groupNumber];
-      const alreadyThere = targetItems.some(
-        (item) => item.consignmentId === id && item.type === type
-      );
-      if (!alreadyThere) {
-        cleaned[groupNumber] = [
-          ...targetItems,
-          { consignmentId: id, type },
-        ];
-      }
+      updated = updated.map((route) => {
+        if (route.id !== routeId) return route;
+        return {
+          ...route,
+          subRoutes: route.subRoutes.map((sr) => {
+            if (sr.id !== subRouteId) return sr;
+            return {
+              ...sr,
+              from: { consignmentId: id, type }, // always single FROM
+            };
+          }),
+        };
+      });
 
-      return cleaned;
+      return updated;
     });
 
     setDraggedSection(null);
   };
 
-  const handleRemoveFromGroup = (consignmentId, groupNumber) => {
-    setGroups((prev) => {
-      const updated = { ...prev };
-      updated[groupNumber] = updated[groupNumber].filter(
-        (item) => item.consignmentId !== consignmentId
-      );
+  // Drop into a "to" slot (appends to tos)
+  const handleDropOnTo = (routeId, subRouteId) => {
+    if (!draggedSection) return;
+    const { id, type } = draggedSection;
+
+    setRoutes((prev) => {
+      let updated = removeSectionFromRoutes(prev, id, type);
+
+      updated = updated.map((route) => {
+        if (route.id !== routeId) return route;
+        return {
+          ...route,
+          subRoutes: route.subRoutes.map((sr) => {
+            if (sr.id !== subRouteId) return sr;
+            // append as another TO
+            return {
+              ...sr,
+              tos: [...sr.tos, { consignmentId: id, type }],
+            };
+          }),
+        };
+      });
+
       return updated;
     });
+
+    setDraggedSection(null);
+  };
+
+  // Remove entire consignment (all sections) from a specific subRoute (for a given role)
+  const handleRemoveFromSubRoute = (routeId, subRouteId, consignmentId, type, role) => {
+    setRoutes((prev) =>
+      prev.map((route) => {
+        if (route.id !== routeId) return route;
+        return {
+          ...route,
+          subRoutes: route.subRoutes.map((sr) => {
+            if (sr.id !== subRouteId) return sr;
+            if (role === "from") {
+              if (
+                sr.from &&
+                sr.from.consignmentId === consignmentId &&
+                sr.from.type === type
+              ) {
+                return { ...sr, from: null };
+              }
+              return sr;
+            } else {
+              return {
+                ...sr,
+                tos: sr.tos.filter(
+                  (t) =>
+                    !(
+                      t.consignmentId === consignmentId &&
+                      t.type === type
+                    )
+                ),
+              };
+            }
+          }),
+        };
+      })
+    );
   };
 
   const handleFileChange = (e) => {
@@ -109,10 +183,33 @@ const App = () => {
         );
         const { consignmentSummaries, sectionsByShipment } =
           buildConsignmentsAndSections(data);
+
+        // Determine routes needed based on consignment count
+        const uniqueConsignments = new Set(
+          consignmentSummaries.map((c) => c.consignment)
+        );
+        const count = uniqueConsignments.size;
+        let needed = 0;
+        if (count > 9) {
+          needed = count - 9;
+        }
+
+        const newRoutes = [];
+        for (let i = 1; i <= needed; i++) {
+          newRoutes.push({
+            id: i,
+            subRoutes: [
+              { id: 1, from: null, tos: [] },
+              { id: 2, from: null, tos: [] },
+            ],
+          });
+        }
+
         setConsignments(consignmentSummaries);
         const moveSuggestions = suggestSectionMoves(sectionsByShipment);
         setMoves(moveSuggestions);
-        setGroups({ 1: [], 2: [], 3: [], 4: [], 5: [] });
+        setRoutes(newRoutes);
+        setRoutesNeeded(needed);
         setDraggedSection(null);
       },
     });
@@ -174,7 +271,7 @@ const App = () => {
     };
   };
 
-  // Moves suggestion (unchanged)
+  // Suggest section moves (unchanged)
   const suggestSectionMoves = (sectionsByShipment) => {
     const suggestions = [];
     const maxPerSection = 40;
@@ -224,22 +321,20 @@ const App = () => {
   const ambientMoves = moves.filter((m) => m.type === "ambient");
   const chillMoves = moves.filter((m) => m.type === "chill");
 
-  // Check if a consignment has its ambient/chill used in ANY group
+  // A section is used if it appears as FROM or TO in any route
   const isSectionUsedAnywhere = (consignmentId, sectionType) => {
-    return Object.values(groups).some((items) =>
-      items.some(
-        (item) =>
-          item.consignmentId === consignmentId && item.type === sectionType
-      )
+    return routes.some((route) =>
+      route.subRoutes.some((sr) => {
+        const fromUsed =
+          sr.from &&
+          sr.from.consignmentId === consignmentId &&
+          sr.from.type === sectionType;
+        const toUsed = sr.tos.some(
+          (t) => t.consignmentId === consignmentId && t.type === sectionType
+        );
+        return fromUsed || toUsed;
+      })
     );
-  };
-
-  // For groups UI: get type for a consignment in a specific group
-  const getTypeInGroup = (consignmentId, groupNum) => {
-    const entry = groups[groupNum].find(
-      (item) => item.consignmentId === consignmentId
-    );
-    return entry ? entry.type : null;
   };
 
   return (
@@ -248,7 +343,7 @@ const App = () => {
         <header className="app-header">
           <h1>Consignment Consolidation Tool</h1>
           <p className="app-subtitle">
-            Upload a CSV file to view consignment loads and suggested section moves.
+            Upload a CSV file to view consignment loads, suggested section moves, and consolidation routes.
           </p>
         </header>
 
@@ -307,7 +402,7 @@ const App = () => {
                           onDragStart={() =>
                             handleDragStart(c.consignment, "ambient")
                           }
-                          title="Drag ambient section to a group"
+                          title="Drag ambient section to a route"
                           style={{ cursor: "grab" }}
                         >
                           {c.ambientTotes}
@@ -322,7 +417,7 @@ const App = () => {
                           onDragStart={() =>
                             handleDragStart(c.consignment, "chill")
                           }
-                          title="Drag chill section to a group"
+                          title="Drag chill section to a route"
                           style={{ cursor: "grab" }}
                         >
                           {c.chillTotes}
@@ -335,7 +430,7 @@ const App = () => {
               </table>
             </div>
 
-            {/* 2nd card: Ambient + Chill + Groups */}
+            {/* 2nd card: Ambient + Chill + Routes */}
             <div className="card card-right">
               <div className="top-two">
                 <div className="panel">
@@ -392,54 +487,122 @@ const App = () => {
               </div>
 
               <div className="panel groups-panel">
-                <h3>Consolidation Groups (Max 5)</h3>
-                <p className="grouping-subtitle">
-                  Drag ambient/chill sections from the summary into groups. Each
-                  section can be in only one group. Click ✕ to remove.
-                </p>
-                <div className="groups-row">
-                  {[1, 2, 3, 4, 5].map((num) => (
-                    <div
-                      key={num}
-                      className="group-card"
-                      onDrop={() => handleDropOnGroup(num)}
-                      onDragOver={handleDragOver}
-                    >
-                      <div className="group-header">Group {num}</div>
-                      {groups[num].length === 0 ? (
-                        <div className="group-empty">Drop here</div>
-                      ) : (
-                        <ul className="group-list">
-                          {groups[num].map((item, idx) => (
-                            <li
-                              key={`${item.consignmentId}-${item.type}-${idx}`}
-                              className={`group-item ${item.type}`}
-                            >
-                              <span className="group-item-content">
-                                {item.consignmentId}{" "}
-                                <span className="group-type">
-                                  ({item.type})
-                                </span>
-                              </span>
-                              <button
-                                className="remove-btn"
-                                onClick={() =>
-                                  handleRemoveFromGroup(
-                                    item.consignmentId,
-                                    num
-                                  )
-                                }
-                                title="Remove from group"
-                              >
-                                ✕
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
+                <h3>
+                  Routes{" "}
+                  {routesNeeded > 0
+                    ? `(needed: ${routesNeeded})`
+                    : "(no consolidation routes needed)"}
+                </h3>
+                {routesNeeded === 0 ? (
+                  <p className="empty-text">
+                    Total consignments ≤ 9. No additional consolidation routes are required.
+                  </p>
+                ) : (
+                  <>
+                    <p className="grouping-subtitle">
+                      Each route has 2 sub‑routes. Drag one section into a <strong>From</strong> slot,
+                      and one or more sections into <strong>To</strong> slots.
+                    </p>
+                    <div className="routes-column">
+                      {routes.map((route) => (
+                        <div key={route.id} className="route-card">
+                          <div className="route-header">Route {route.id}</div>
+                          <div className="route-subroutes">
+                            {route.subRoutes.map((sr) => (
+                              <div key={sr.id} className="subroute-card">
+                                <div className="subroute-title">
+                                  Sub‑route {sr.id}
+                                </div>
+
+                                {/* FROM slot */}
+                                <div
+                                  className="subroute-slot from-slot"
+                                  onDrop={() =>
+                                    handleDropOnFrom(route.id, sr.id)
+                                  }
+                                  onDragOver={handleDragOver}
+                                >
+                                  <div className="slot-label">From</div>
+                                  {sr.from ? (
+                                    <div className="slot-item from">
+                                      <span>
+                                        {sr.from.consignmentId} (
+                                        {sr.from.type})
+                                      </span>
+                                      <button
+                                        className="remove-btn"
+                                        onClick={() =>
+                                          handleRemoveFromSubRoute(
+                                            route.id,
+                                            sr.id,
+                                            sr.from.consignmentId,
+                                            sr.from.type,
+                                            "from"
+                                          )
+                                        }
+                                        title="Remove from"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <div className="slot-empty">
+                                      Drop a section here
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* TOs slot */}
+                                <div
+                                  className="subroute-slot to-slot"
+                                  onDrop={() =>
+                                    handleDropOnTo(route.id, sr.id)
+                                  }
+                                  onDragOver={handleDragOver}
+                                >
+                                  <div className="slot-label">To</div>
+                                  {sr.tos.length === 0 ? (
+                                    <div className="slot-empty">
+                                      Drop sections here (multiple allowed)
+                                    </div>
+                                  ) : (
+                                    <ul className="slot-list">
+                                      {sr.tos.map((t, idx) => (
+                                        <li
+                                          key={`${t.consignmentId}-${t.type}-${idx}`}
+                                          className={`slot-item ${t.type}`}
+                                        >
+                                          <span>
+                                            {t.consignmentId} ({t.type})
+                                          </span>
+                                          <button
+                                            className="remove-btn"
+                                            onClick={() =>
+                                              handleRemoveFromSubRoute(
+                                                route.id,
+                                                sr.id,
+                                                t.consignmentId,
+                                                t.type,
+                                                "to"
+                                              )
+                                            }
+                                            title="Remove to"
+                                          >
+                                            ✕
+                                          </button>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </>
+                )}
               </div>
             </div>
           </div>
