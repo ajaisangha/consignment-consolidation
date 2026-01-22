@@ -18,23 +18,11 @@ const getColorClass = (totes) => {
   return "red";
 };
 
-// Route structure:
-// routes = [
-//   {
-//     id: 1,
-//     subRoutes: [
-//       { id: 1, from: {consignmentId,type} | null, tos: [{consignmentId,type}] },
-//       { id: 2, from: {...}|null, tos: [...] }
-//     ]
-//   },
-//   ...
-// ]
-
 const App = () => {
   const [consignments, setConsignments] = useState([]);
   const [moves, setMoves] = useState([]);
   const [routes, setRoutes] = useState([]);
-  const [draggedSection, setDraggedSection] = useState(null); // {id, type}
+  const [draggedSection, setDraggedSection] = useState(null);
   const [routesNeeded, setRoutesNeeded] = useState(0);
   const fileInputRef = useRef(null);
 
@@ -49,7 +37,6 @@ const App = () => {
     }
   };
 
-  // Start dragging a specific section of a consignment
   const handleDragStart = (consignmentId, sectionType) => {
     setDraggedSection({ id: consignmentId, type: sectionType });
   };
@@ -58,16 +45,13 @@ const App = () => {
     e.preventDefault();
   };
 
-  // Utility – remove this section from all routes before placing it
   const removeSectionFromRoutes = (routesState, consId, type) => {
     return routesState.map((r) => ({
       ...r,
       subRoutes: r.subRoutes.map((sr) => ({
         ...sr,
         from:
-          sr.from &&
-          sr.from.consignmentId === consId &&
-          sr.from.type === type
+          sr.from && sr.from.consignmentId === consId && sr.from.type === type
             ? null
             : sr.from,
         tos: sr.tos.filter(
@@ -77,14 +61,12 @@ const App = () => {
     }));
   };
 
-  // Drop into a "from" slot
   const handleDropOnFrom = (routeId, subRouteId) => {
     if (!draggedSection) return;
     const { id, type } = draggedSection;
 
     setRoutes((prev) => {
       let updated = removeSectionFromRoutes(prev, id, type);
-
       updated = updated.map((route) => {
         if (route.id !== routeId) return route;
         return {
@@ -93,26 +75,22 @@ const App = () => {
             if (sr.id !== subRouteId) return sr;
             return {
               ...sr,
-              from: { consignmentId: id, type }, // always single FROM
+              from: { consignmentId: id, type },
             };
           }),
         };
       });
-
       return updated;
     });
-
     setDraggedSection(null);
   };
 
-  // Drop into a "to" slot (appends to tos)
   const handleDropOnTo = (routeId, subRouteId) => {
     if (!draggedSection) return;
     const { id, type } = draggedSection;
 
     setRoutes((prev) => {
       let updated = removeSectionFromRoutes(prev, id, type);
-
       updated = updated.map((route) => {
         if (route.id !== routeId) return route;
         return {
@@ -126,21 +104,12 @@ const App = () => {
           }),
         };
       });
-
       return updated;
     });
-
     setDraggedSection(null);
   };
 
-  // Remove from or to
-  const handleRemoveFromSubRoute = (
-    routeId,
-    subRouteId,
-    consignmentId,
-    type,
-    role
-  ) => {
+  const handleRemoveFromSubRoute = (routeId, subRouteId, consignmentId, type, role) => {
     setRoutes((prev) =>
       prev.map((route) => {
         if (route.id !== routeId) return route;
@@ -161,11 +130,7 @@ const App = () => {
               return {
                 ...sr,
                 tos: sr.tos.filter(
-                  (t) =>
-                    !(
-                      t.consignmentId === consignmentId &&
-                      t.type === type
-                    )
+                  (t) => !(t.consignmentId === consignmentId && t.type === type)
                 ),
               };
             }
@@ -173,6 +138,95 @@ const App = () => {
         };
       })
     );
+  };
+
+  // NEW CONSOLIDATION LOGIC
+  const generateConsolidationSuggestions = (sectionsByShipment, routesNeeded) => {
+    const suggestions = [];
+    const maxPerSection = 40;
+
+    // For each shipment, generate suggestions based on routes needed
+    Object.entries(sectionsByShipment).forEach(([shipment, sections]) => {
+      // Separate by type
+      const ambientSections = sections
+        .filter((s) => s.type === "ambient" && s.totes > 0)
+        .map((s) => ({ ...s, shipment }));
+      const chillSections = sections
+        .filter((s) => s.type === "chill" && s.totes > 0)
+        .map((s) => ({ ...s, shipment }));
+
+      // Generate suggestions for ambient
+      if (routesNeeded > 0) {
+        const ambientSuggestions = generateTypeSuggestions(
+          ambientSections,
+          routesNeeded,
+          maxPerSection,
+          "ambient"
+        );
+        suggestions.push(...ambientSuggestions);
+      }
+
+      // Generate suggestions for chill
+      if (routesNeeded > 0) {
+        const chillSuggestions = generateTypeSuggestions(
+          chillSections,
+          routesNeeded,
+          maxPerSection,
+          "chill"
+        );
+        suggestions.push(...chillSuggestions);
+      }
+    });
+
+    return suggestions;
+  };
+
+  const generateTypeSuggestions = (sections, routesNeeded, maxTotes, type) => {
+    const suggestions = [];
+    
+    // Step 1: Find 2N lowest tote sections (N = routes needed)
+    const sortedSections = [...sections].sort((a, b) => a.totes - b.totes);
+    const numLowestNeeded = Math.min(routesNeeded * 2, sortedSections.length);
+    const lowestSections = sortedSections.slice(0, numLowestNeeded);
+
+    // Step 2: For each lowest section, find suitable target
+    for (let i = 0; i < lowestSections.length; i++) {
+      const sourceSection = lowestSections[i];
+      
+      // Available space after adding source = 40 - source.totes
+      const availableSpace = maxTotes - sourceSection.totes;
+      
+      // Find target: sections with totes <= availableSpace OR exactly source.totes
+      const potentialTargets = sections.filter((target) => 
+        target.consignment !== sourceSection.consignment &&
+        (target.totes <= availableSpace || target.totes === sourceSection.totes)
+      );
+
+      if (potentialTargets.length > 0) {
+        // Pick the largest suitable target (best fit)
+        const bestTarget = potentialTargets.reduce((best, current) => 
+          current.totes > best.totes ? current : best
+        );
+
+        suggestions.push({
+          shipment: sourceSection.shipment,
+          type,
+          fromConsignment: sourceSection.consignment,
+          toConsignment: bestTarget.consignment,
+          fromSectionTotes: sourceSection.totes,
+          toSectionTotesBefore: bestTarget.totes,
+          toSectionTotesAfter: sourceSection.totes + bestTarget.totes,
+        });
+
+        // Remove used sections to avoid duplicates
+        sections = sections.filter(s => 
+          s.consignment !== sourceSection.consignment && 
+          s.consignment !== bestTarget.consignment
+        );
+      }
+    }
+
+    return suggestions;
   };
 
   const handleFileChange = (e) => {
@@ -189,7 +243,7 @@ const App = () => {
         const { consignmentSummaries, sectionsByShipment } =
           buildConsignmentsAndSections(data);
 
-        // Determine routes needed based on consignment count
+        // Calculate routes needed
         const uniqueConsignments = new Set(
           consignmentSummaries.map((c) => c.consignment)
         );
@@ -199,6 +253,7 @@ const App = () => {
           needed = count - 9;
         }
 
+        // Create routes structure
         const newRoutes = [];
         for (let i = 1; i <= needed; i++) {
           newRoutes.push({
@@ -210,9 +265,14 @@ const App = () => {
           });
         }
 
+        // NEW: Generate consolidation suggestions based on routes needed
+        const consolidationSuggestions = generateConsolidationSuggestions(
+          sectionsByShipment,
+          needed
+        );
+
         setConsignments(consignmentSummaries);
-        const moveSuggestions = suggestSectionMoves(sectionsByShipment);
-        setMoves(moveSuggestions);
+        setMoves(consolidationSuggestions);
         setRoutes(newRoutes);
         setRoutesNeeded(needed);
         setDraggedSection(null);
@@ -220,7 +280,6 @@ const App = () => {
     });
   };
 
-  // Build consignments and sections
   const buildConsignmentsAndSections = (data) => {
     const consMap = {};
     const sectionsByShipment = {};
@@ -276,57 +335,9 @@ const App = () => {
     };
   };
 
-  // Suggest section moves (unchanged)
-  const suggestSectionMoves = (sectionsByShipment) => {
-    const suggestions = [];
-    const maxPerSection = 40;
-
-    Object.entries(sectionsByShipment).forEach(([shipment, sections]) => {
-      if (sections.length === 0) return;
-
-      const active = sections.map((s) => ({ ...s }));
-      active.sort((a, b) => a.totes - b.totes);
-
-      const usedSource = new Set();
-
-      for (let i = 0; i < active.length; i++) {
-        const source = active[i];
-        if (usedSource.has(source.sectionId)) continue;
-
-        for (let j = 0; j < active.length; j++) {
-          if (i === j) continue;
-          const target = active[j];
-
-          if (target.consignment === source.consignment) continue;
-          if (target.type !== source.type) continue;
-
-          const combined = target.totes + source.totes;
-          if (combined <= maxPerSection) {
-            suggestions.push({
-              shipment,
-              type: source.type,
-              fromConsignment: source.consignment,
-              toConsignment: target.consignment,
-              fromSectionTotes: source.totes,
-              toSectionTotesBefore: target.totes,
-              toSectionTotesAfter: combined,
-            });
-
-            target.totes = combined;
-            usedSource.add(source.sectionId);
-            break;
-          }
-        }
-      }
-    });
-
-    return suggestions;
-  };
-
   const ambientMoves = moves.filter((m) => m.type === "ambient");
   const chillMoves = moves.filter((m) => m.type === "chill");
 
-  // A section is used if it appears as FROM or TO in any route
   const isSectionUsedAnywhere = (consignmentId, sectionType) => {
     return routes.some((route) =>
       route.subRoutes.some((sr) => {
@@ -348,7 +359,7 @@ const App = () => {
         <header className="app-header">
           <h1>Consignment Consolidation Tool</h1>
           <p className="app-subtitle">
-            Upload a CSV file to view consignment loads, suggested section moves, and consolidation routes.
+            Upload a CSV file to view consignment loads, consolidation suggestions, and routes.
           </p>
         </header>
 
@@ -435,7 +446,7 @@ const App = () => {
               </table>
             </div>
 
-            {/* 2nd card: Routes + Ambient + Chill side by side */}
+            {/* 2nd card: Routes + Ambient + Chill */}
             <div className="card card-right">
               <div className="right-columns">
                 {/* Routes column */}
@@ -465,10 +476,7 @@ const App = () => {
                                   <div className="subroute-title">
                                     Sub‑route {sr.id}
                                   </div>
-
-                                  {/* FROM --> TO line */}
                                   <div className="from-to-row">
-                                    {/* FROM slot */}
                                     <div
                                       className="subroute-slot from-slot"
                                       onDrop={() =>
@@ -506,12 +514,8 @@ const App = () => {
                                       )}
                                     </div>
 
-                                    {/* Arrow */}
-                                    <div className="from-to-arrow">
-                                      ─────&gt;
-                                    </div>
+                                    <div className="from-to-arrow">─────&gt;</div>
 
-                                    {/* TO slot */}
                                     <div
                                       className="subroute-slot to-slot"
                                       onDrop={() =>
@@ -567,17 +571,17 @@ const App = () => {
 
                 {/* Ambient and Chill columns */}
                 <div className="panel small-panel">
-                  <h3>Ambient section</h3>
+                  <h3>Ambient consolidation</h3>
                   {ambientMoves.length === 0 ? (
                     <p className="empty-text">
-                      No ambient section moves that keep each section ≤ 40 totes.
+                      No ambient consolidation suggestions.
                     </p>
                   ) : (
                     <table>
                       <thead>
                         <tr>
-                          <th>Source consignment</th>
-                          <th>Destination consignment</th>
+                          <th>Move</th>
+                          <th>To</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -593,17 +597,17 @@ const App = () => {
                 </div>
 
                 <div className="panel small-panel">
-                  <h3>Chill section</h3>
+                  <h3>Chill consolidation</h3>
                   {chillMoves.length === 0 ? (
                     <p className="empty-text">
-                      No chill section moves that keep each section ≤ 40 totes.
+                      No chill consolidation suggestions.
                     </p>
                   ) : (
                     <table>
                       <thead>
                         <tr>
-                          <th>Source consignment</th>
-                          <th>Destination consignment</th>
+                          <th>Move</th>
+                          <th>To</th>
                         </tr>
                       </thead>
                       <tbody>
