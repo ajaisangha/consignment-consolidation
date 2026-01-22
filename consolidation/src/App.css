@@ -1,30 +1,39 @@
 .app {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #111827;
-  min-height: 100vh;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
-  padding: 20px;
+  align-items: center;
+  padding: 8px;
+  box-sizing: border-box;
 }
 
 .app-inner {
   width: 100%;
-  max-width: 1400px;
+  max-width: 1500px;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
+/* Header + controls */
 .app-header {
-  margin-bottom: 16px;
+  margin-bottom: 6px;
   text-align: center;
+  flex-shrink: 0;
 }
 
 .app-header h1 {
   font-size: 1.6rem;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .app-subtitle {
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   color: #6b7280;
   margin: 0;
 }
@@ -32,18 +41,20 @@
 .controls {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 24px;
+  gap: 10px;
+  margin-bottom: 10px;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .controls input[type="file"] {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
+  max-width: 260px;
 }
 
 .btn {
-  padding: 8px 16px;
-  font-size: 0.85rem;
+  padding: 8px 14px;
+  font-size: 0.9rem;
   border-radius: 6px;
   border: 1px solid transparent;
   cursor: pointer;
@@ -64,62 +75,126 @@
 /* Main two-card layout */
 .layout-row {
   display: flex;
-  gap: 32px;
-  align-items: flex-start;
+  gap: 18px;
+  align-items: stretch;
   justify-content: center;
+  flex: 1;
+  overflow: hidden;
 }
 
 .card {
-  background-color: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
-  padding: 20px;
+  background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%); /* subtle gradient */
+  border-radius: 12px;
+  /* Enhanced shadow */
+  box-shadow: 
+    0 8px 25px rgba(15, 23, 42, 0.15),
+    0 2px 8px rgba(15, 23, 42, 0.10),
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 14px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  transition: all 0.3s ease;
 }
 
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 12px 35px rgba(15, 23, 42, 0.20),
+    0 4px 12px rgba(15, 23, 42, 0.15),
+    0 2px 6px rgba(0, 0, 0, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+/* Different accent shadows for each card */
 .card-summary {
-  flex: 1.2;
-  min-width: 420px;
+  flex: 0 0 480px;
+  min-width: 480px;
+  max-width: 480px;
+  box-shadow: 
+    0 8px 25px rgba(99, 102, 241, 0.15), /* blue accent */
+    0 2px 8px rgba(15, 23, 42, 0.10),
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.card-summary:hover {
+  box-shadow: 
+    0 12px 35px rgba(99, 102, 241, 0.20),
+    0 4px 12px rgba(15, 23, 42, 0.15),
+    0 2px 6px rgba(0, 0, 0, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
 }
 
 .card-right {
-  flex: 1.4;
-  min-width: 480px;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  box-shadow: 
+    0 8px 25px rgba(16, 185, 129, 0.15), /* green accent */
+    0 2px 8px rgba(15, 23, 42, 0.10),
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.card-right:hover {
+  box-shadow: 
+    0 12px 35px rgba(16, 185, 129, 0.20),
+    0 4px 12px rgba(15, 23, 42, 0.15),
+    0 2px 6px rgba(0, 0, 0, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95);
+}
+
+/* Right card: [routes][ambient][chill] */
+.right-columns {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.routes-panel {
+  flex: 1.5;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  min-width: 0;
+  overflow: hidden;
 }
 
-/* Top two panels in right card */
-.top-two {
-  display: flex;
-  gap: 16px;
-}
-
-.top-two .panel {
+.small-panel {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
-/* Routes panel at bottom of right card */
-.groups-panel {
-  margin-top: 8px;
+/* Headings inside cards */
+.card h3,
+.panel h3 {
+  font-size: 1rem;
+  margin: 0 0 4px;
 }
 
 /* Tables */
 table {
   border-collapse: separate;
-  border-spacing: 6px 6px;
-  margin-top: 8px;
+  border-spacing: 4px 4px;
+  margin-top: 6px;
   width: 100%;
+  font-size: 0.9rem;
 }
 
 th,
 td {
   border: 1px solid #e5e7eb;
-  padding: 10px 12px;
+  padding: 8px 10px;
   text-align: left;
-  font-size: 0.9rem;
   background-color: #ffffff;
   position: relative;
+  box-sizing: border-box;
 }
 
 th {
@@ -130,6 +205,14 @@ th {
 
 tr:nth-child(even) td {
   background-color: #f9fafb;
+}
+
+/* Let tables grow but still avoid whole-page scroll */
+.card-summary table,
+.small-panel table {
+  display: block;
+  max-height: calc(100% - 24px);
+  overflow: auto;
 }
 
 /* Tote colors */
@@ -146,7 +229,7 @@ tr:nth-child(even) td {
   position: absolute;
   top: 2px;
   right: 4px;
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: bold;
   color: #10b981;
 }
@@ -162,8 +245,8 @@ tr:nth-child(even) td {
   background: #10b981;
   color: white;
   border-radius: 50%;
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -189,9 +272,9 @@ tr:nth-child(even) td {
 .empty-text {
   font-size: 0.9rem;
   color: #6b7280;
-  margin-top: 12px;
+  margin-top: 6px;
   text-align: center;
-  padding: 12px;
+  padding: 8px;
   background-color: #f9fafb;
   border-radius: 4px;
 }
@@ -201,7 +284,7 @@ tr:nth-child(even) td {
   font-size: 0.85rem;
   text-align: center;
   color: #6b7280;
-  margin-bottom: 16px;
+  margin: 4px 0 8px;
 }
 
 /* ===== Routes layout styles ===== */
@@ -209,40 +292,42 @@ tr:nth-child(even) td {
 .routes-column {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .route-card {
   background-color: #f8fafc;
-  border-radius: 8px;
+  border-radius: 6px;
   border: 1px solid #dbeafe;
-  padding: 12px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .route-header {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-weight: 700;
   color: #1d4ed8;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .route-subroutes {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .subroute-card {
   background-color: #ffffff;
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px dashed #cbd5e1;
-  padding: 8px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .subroute-title {
@@ -251,13 +336,22 @@ tr:nth-child(even) td {
   color: #475569;
 }
 
+/* FROM --> TO row */
+.from-to-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
 /* FROM / TO slots */
 .subroute-slot {
-  border-radius: 6px;
+  border-radius: 4px;
   border: 1px dashed #cbd5e1;
-  padding: 8px;
+  padding: 6px;
   background-color: #f9fafb;
-  min-height: 40px;
+  min-height: 38px;
+  flex: 1;
+  box-sizing: border-box;
 }
 
 .from-slot {
@@ -268,12 +362,22 @@ tr:nth-child(even) td {
   border-color: #60a5fa;
 }
 
+.from-to-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  color: #6b7280;
+  padding: 0 2px;
+}
+
+/* Slot content */
 .slot-label {
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   color: #6b7280;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .slot-empty {
@@ -288,7 +392,7 @@ tr:nth-child(even) td {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 /* Items in FROM / TO slots */
@@ -296,9 +400,9 @@ tr:nth-child(even) td {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 4px;
   font-size: 0.8rem;
-  padding: 4px 8px;
+  padding: 4px 7px;
   border-radius: 4px;
   background-color: #e5e7eb;
 }
@@ -315,46 +419,52 @@ tr:nth-child(even) td {
   border-left: 3px solid #f59e0b;
 }
 
-/* Reuse remove button for route items */
+/* Remove button */
 .remove-btn {
   background: #ef4444;
   color: white;
   border: none;
   border-radius: 50%;
-  width: 16px;
-  height: 16px;
-  font-size: 0.7rem;
+  width: 15px;
+  height: 15px;
+  font-size: 0.65rem;
   font-weight: bold;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 .remove-btn:hover {
   background: #dc2626;
-  transform: scale(1.1);
+  transform: scale(1.05);
 }
 
 /* Responsive */
-@media (max-width: 1024px) {
+@media (max-width: 1200px) {
   .layout-row {
     flex-direction: column;
   }
 
-  .card-summary,
-  .card-right {
-    min-width: 100%;
+  .card-summary {
+    flex: 0 0 auto;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .card {
+    height: 50%;
+  }
+
+  .right-columns {
+    flex-direction: row;
   }
 }
 
-@media (max-width: 768px) {
-  .app {
-    padding: 10px;
-  }
-
-  .top-two {
+@media (max-width: 800px) {
+  .right-columns {
     flex-direction: column;
   }
 }

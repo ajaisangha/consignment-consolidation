@@ -119,7 +119,6 @@ const App = () => {
           ...route,
           subRoutes: route.subRoutes.map((sr) => {
             if (sr.id !== subRouteId) return sr;
-            // append as another TO
             return {
               ...sr,
               tos: [...sr.tos, { consignmentId: id, type }],
@@ -134,8 +133,14 @@ const App = () => {
     setDraggedSection(null);
   };
 
-  // Remove entire consignment (all sections) from a specific subRoute (for a given role)
-  const handleRemoveFromSubRoute = (routeId, subRouteId, consignmentId, type, role) => {
+  // Remove from or to
+  const handleRemoveFromSubRoute = (
+    routeId,
+    subRouteId,
+    consignmentId,
+    type,
+    role
+  ) => {
     setRoutes((prev) =>
       prev.map((route) => {
         if (route.id !== routeId) return route;
@@ -430,10 +435,138 @@ const App = () => {
               </table>
             </div>
 
-            {/* 2nd card: Ambient + Chill + Routes */}
+            {/* 2nd card: Routes + Ambient + Chill side by side */}
             <div className="card card-right">
-              <div className="top-two">
-                <div className="panel">
+              <div className="right-columns">
+                {/* Routes column */}
+                <div className="panel routes-panel">
+                  <h3>
+                    Routes{" "}
+                    {routesNeeded > 0
+                      ? `(needed: ${routesNeeded})`
+                      : "(no consolidation routes needed)"}
+                  </h3>
+                  {routesNeeded === 0 ? (
+                    <p className="empty-text">
+                      Total consignments ≤ 9. No additional consolidation routes are required.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="grouping-subtitle">
+                        Each route has 2 sub‑routes. Drag one section into <strong>From</strong> and one or more into <strong>To</strong>.
+                      </p>
+                      <div className="routes-column">
+                        {routes.map((route) => (
+                          <div key={route.id} className="route-card">
+                            <div className="route-header">Route {route.id}</div>
+                            <div className="route-subroutes">
+                              {route.subRoutes.map((sr) => (
+                                <div key={sr.id} className="subroute-card">
+                                  <div className="subroute-title">
+                                    Sub‑route {sr.id}
+                                  </div>
+
+                                  {/* FROM --> TO line */}
+                                  <div className="from-to-row">
+                                    {/* FROM slot */}
+                                    <div
+                                      className="subroute-slot from-slot"
+                                      onDrop={() =>
+                                        handleDropOnFrom(route.id, sr.id)
+                                      }
+                                      onDragOver={handleDragOver}
+                                    >
+                                      <div className="slot-label">From</div>
+                                      {sr.from ? (
+                                        <div className="slot-item from">
+                                          <span>
+                                            {sr.from.consignmentId} (
+                                            {sr.from.type})
+                                          </span>
+                                          <button
+                                            className="remove-btn"
+                                            onClick={() =>
+                                              handleRemoveFromSubRoute(
+                                                route.id,
+                                                sr.id,
+                                                sr.from.consignmentId,
+                                                sr.from.type,
+                                                "from"
+                                              )
+                                            }
+                                            title="Remove from"
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div className="slot-empty">
+                                          Drop a section here
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Arrow */}
+                                    <div className="from-to-arrow">
+                                      ─────&gt;
+                                    </div>
+
+                                    {/* TO slot */}
+                                    <div
+                                      className="subroute-slot to-slot"
+                                      onDrop={() =>
+                                        handleDropOnTo(route.id, sr.id)
+                                      }
+                                      onDragOver={handleDragOver}
+                                    >
+                                      <div className="slot-label">To</div>
+                                      {sr.tos.length === 0 ? (
+                                        <div className="slot-empty">
+                                          Drop sections here (multiple allowed)
+                                        </div>
+                                      ) : (
+                                        <ul className="slot-list">
+                                          {sr.tos.map((t, idx) => (
+                                            <li
+                                              key={`${t.consignmentId}-${t.type}-${idx}`}
+                                              className={`slot-item ${t.type}`}
+                                            >
+                                              <span>
+                                                {t.consignmentId} ({t.type})
+                                              </span>
+                                              <button
+                                                className="remove-btn"
+                                                onClick={() =>
+                                                  handleRemoveFromSubRoute(
+                                                    route.id,
+                                                    sr.id,
+                                                    t.consignmentId,
+                                                    t.type,
+                                                    "to"
+                                                  )
+                                                }
+                                                title="Remove to"
+                                              >
+                                                ✕
+                                              </button>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Ambient and Chill columns */}
+                <div className="panel small-panel">
                   <h3>Ambient section</h3>
                   {ambientMoves.length === 0 ? (
                     <p className="empty-text">
@@ -459,7 +592,7 @@ const App = () => {
                   )}
                 </div>
 
-                <div className="panel">
+                <div className="panel small-panel">
                   <h3>Chill section</h3>
                   {chillMoves.length === 0 ? (
                     <p className="empty-text">
@@ -484,125 +617,6 @@ const App = () => {
                     </table>
                   )}
                 </div>
-              </div>
-
-              <div className="panel groups-panel">
-                <h3>
-                  Routes{" "}
-                  {routesNeeded > 0
-                    ? `(needed: ${routesNeeded})`
-                    : "(no consolidation routes needed)"}
-                </h3>
-                {routesNeeded === 0 ? (
-                  <p className="empty-text">
-                    Total consignments ≤ 9. No additional consolidation routes are required.
-                  </p>
-                ) : (
-                  <>
-                    <p className="grouping-subtitle">
-                      Each route has 2 sub‑routes. Drag one section into a <strong>From</strong> slot,
-                      and one or more sections into <strong>To</strong> slots.
-                    </p>
-                    <div className="routes-column">
-                      {routes.map((route) => (
-                        <div key={route.id} className="route-card">
-                          <div className="route-header">Route {route.id}</div>
-                          <div className="route-subroutes">
-                            {route.subRoutes.map((sr) => (
-                              <div key={sr.id} className="subroute-card">
-                                <div className="subroute-title">
-                                  Sub‑route {sr.id}
-                                </div>
-
-                                {/* FROM slot */}
-                                <div
-                                  className="subroute-slot from-slot"
-                                  onDrop={() =>
-                                    handleDropOnFrom(route.id, sr.id)
-                                  }
-                                  onDragOver={handleDragOver}
-                                >
-                                  <div className="slot-label">From</div>
-                                  {sr.from ? (
-                                    <div className="slot-item from">
-                                      <span>
-                                        {sr.from.consignmentId} (
-                                        {sr.from.type})
-                                      </span>
-                                      <button
-                                        className="remove-btn"
-                                        onClick={() =>
-                                          handleRemoveFromSubRoute(
-                                            route.id,
-                                            sr.id,
-                                            sr.from.consignmentId,
-                                            sr.from.type,
-                                            "from"
-                                          )
-                                        }
-                                        title="Remove from"
-                                      >
-                                        ✕
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <div className="slot-empty">
-                                      Drop a section here
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* TOs slot */}
-                                <div
-                                  className="subroute-slot to-slot"
-                                  onDrop={() =>
-                                    handleDropOnTo(route.id, sr.id)
-                                  }
-                                  onDragOver={handleDragOver}
-                                >
-                                  <div className="slot-label">To</div>
-                                  {sr.tos.length === 0 ? (
-                                    <div className="slot-empty">
-                                      Drop sections here (multiple allowed)
-                                    </div>
-                                  ) : (
-                                    <ul className="slot-list">
-                                      {sr.tos.map((t, idx) => (
-                                        <li
-                                          key={`${t.consignmentId}-${t.type}-${idx}`}
-                                          className={`slot-item ${t.type}`}
-                                        >
-                                          <span>
-                                            {t.consignmentId} ({t.type})
-                                          </span>
-                                          <button
-                                            className="remove-btn"
-                                            onClick={() =>
-                                              handleRemoveFromSubRoute(
-                                                route.id,
-                                                sr.id,
-                                                t.consignmentId,
-                                                t.type,
-                                                "to"
-                                              )
-                                            }
-                                            title="Remove to"
-                                          >
-                                            ✕
-                                          </button>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
               </div>
             </div>
           </div>
