@@ -20,7 +20,7 @@ const getColorClass = (totes) => {
 
 const App = () => {
   const [consignments, setConsignments] = useState([]);
-  const [moves, setMoves] = useState([]);
+  const [suggestions, setSuggestions] = useState([]); // Stores grouped suggestions
   const [routes, setRoutes] = useState([]);
   const [draggedSection, setDraggedSection] = useState(null);
   const [routesNeeded, setRoutesNeeded] = useState(0);
@@ -28,7 +28,7 @@ const App = () => {
 
   const handleClear = () => {
     setConsignments([]);
-    setMoves([]);
+    setSuggestions([]);
     setRoutes([]);
     setDraggedSection(null);
     setRoutesNeeded(0);
@@ -140,65 +140,107 @@ const App = () => {
     );
   };
 
+  // --- UPDATED LOGIC START ---
   const generateConsolidationSuggestions = (sectionsByShipment, routesNeeded) => {
-    const suggestions = [];
-    const maxPerSection = 40;
+    if (routesNeeded <= 0) return [];
 
-    Object.entries(sectionsByShipment).forEach(([shipment, sections]) => {
-      const ambientSections = sections
-        .filter((s) => s.type === "ambient" && s.totes > 0)
-        .map((s) => ({ ...s, shipment }));
-      const chillSections = sections
-        .filter((s) => s.type === "chill" && s.totes > 0)
-        .map((s) => ({ ...s, shipment }));
+    const MAX_CAPACITY = 40;
+    const groupedSuggestions = [];
+    const usedSectionIds = new Set(); // Track globally used sections
 
-      if (routesNeeded > 0) {
-        suggestions.push(...generateTypeSuggestions(ambientSections, routesNeeded, maxPerSection, "ambient"));
-      }
-      if (routesNeeded > 0) {
-        suggestions.push(...generateTypeSuggestions(chillSections, routesNeeded, maxPerSection, "chill"));
-      }
+    // 1. Flatten into simulation array
+    let allSections = [];
+    Object.values(sectionsByShipment).forEach((sections) => {
+      sections.forEach((section) => {
+        if (section.totes > 0) {
+          allSections.push({
+            ...section,
+            simulatedTotes: section.totes,
+            id: section.sectionId,
+            isSource: false,
+          });
+        }
+      });
     });
-    return suggestions;
-  };
 
-  const generateTypeSuggestions = (sections, routesNeeded, maxTotes, type) => {
-    const suggestions = [];
-    let tempSections = [...sections].sort((a, b) => a.totes - b.totes);
-    const numLowestNeeded = Math.min(routesNeeded * 2, tempSections.length);
-    const lowestSections = tempSections.slice(0, numLowestNeeded);
+    // 2. Identify Sources: Smallest first
+    allSections.sort((a, b) => a.totes - b.totes);
 
-    for (let i = 0; i < lowestSections.length; i++) {
-      const sourceSection = lowestSections[i];
-      const availableSpace = maxTotes - sourceSection.totes;
-      const potentialTargets = tempSections.filter((target) => 
-        target.consignment !== sourceSection.consignment &&
-        (target.totes <= availableSpace || target.totes === sourceSection.totes)
-      );
+    const countToEmpty = routesNeeded * 2;
+    const sources = [];
+    
+    // Pick the smallest sections as sources and mark them as used immediately
+    for (let i = 0; i < allSections.length && sources.length < countToEmpty; i++) {
+        allSections[i].isSource = true;
+        usedSectionIds.add(allSections[i].id);
+        sources.push(allSections[i]);
+    }
 
-      if (potentialTargets.length > 0) {
-        const bestTarget = potentialTargets.reduce((best, current) => 
-          current.totes > best.totes ? current : best
+    // 3. Process each source to find targets
+    sources.forEach((source) => {
+      let totesToMove = source.totes;
+      const moves = [];
+
+      while (totesToMove > 0) {
+        // Targets must NOT be a source AND must NOT have been used as a target for another move yet
+        // This ensures a 1-to-1 or Many-to-1 relationship where a section is only touched once.
+        let candidates = allSections.filter(
+          (s) => !s.isSource && !usedSectionIds.has(s.id) && s.simulatedTotes < MAX_CAPACITY
         );
 
-        suggestions.push({
-          shipment: sourceSection.shipment,
-          type,
-          fromConsignment: sourceSection.consignment,
-          toConsignment: bestTarget.consignment,
-          fromSectionTotes: sourceSection.totes,
-          toSectionTotesBefore: bestTarget.totes,
-          toSectionTotesAfter: sourceSection.totes + bestTarget.totes,
+        if (candidates.length === 0) {
+          moves.push({
+            toConsignment: "NO AVAILABLE SECTION",
+            toType: "N/A",
+            qty: totesToMove,
+          });
+          totesToMove = 0;
+          break;
+        }
+
+        candidates.forEach(c => {
+          c.spaceAvailable = MAX_CAPACITY - c.simulatedTotes;
         });
 
-        tempSections = tempSections.filter(s => 
-          s.consignment !== sourceSection.consignment && 
-          s.consignment !== bestTarget.consignment
-        );
+        let bestTarget = null;
+        let candidatesThatFitAll = candidates.filter(c => c.spaceAvailable >= totesToMove);
+        
+        if (candidatesThatFitAll.length > 0) {
+          candidatesThatFitAll.sort((a, b) => a.spaceAvailable - b.spaceAvailable);
+          bestTarget = candidatesThatFitAll[0];
+        } else {
+          candidates.sort((a, b) => b.spaceAvailable - a.spaceAvailable);
+          bestTarget = candidates[0];
+        }
+
+        if (bestTarget) {
+          const moveAmount = Math.min(totesToMove, bestTarget.spaceAvailable);
+          
+          moves.push({
+            toConsignment: bestTarget.consignment,
+            toType: bestTarget.type,
+            qty: moveAmount,
+            newTotal: bestTarget.simulatedTotes + moveAmount
+          });
+
+          // Mark this target as used so it cannot be a source or another target
+          usedSectionIds.add(bestTarget.id);
+          bestTarget.simulatedTotes += moveAmount;
+          totesToMove -= moveAmount;
+        }
       }
-    }
-    return suggestions;
+
+      groupedSuggestions.push({
+        sourceConsignment: source.consignment,
+        sourceType: source.type,
+        totalQty: source.totes,
+        moves: moves
+      });
+    });
+
+    return groupedSuggestions;
   };
+  // --- UPDATED LOGIC END ---
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -208,12 +250,20 @@ const App = () => {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
-        const data = results.data.filter((r) => r["Consignment"] && r["Consignment"].trim() !== "");
-        const { consignmentSummaries, sectionsByShipment } = buildConsignmentsAndSections(data);
+        const data = results.data.filter(
+          (r) => r["Consignment"] && r["Consignment"].trim() !== ""
+        );
+        const { consignmentSummaries, sectionsByShipment } =
+          buildConsignmentsAndSections(data);
 
-        const uniqueConsignments = new Set(consignmentSummaries.map((c) => c.consignment));
+        const uniqueConsignments = new Set(
+          consignmentSummaries.map((c) => c.consignment)
+        );
         const count = uniqueConsignments.size;
-        let needed = count > 9 ? count - 9 : 0;
+        let needed = 0;
+        if (count > 9) {
+          needed = count - 9;
+        }
 
         const newRoutes = [];
         for (let i = 1; i <= needed; i++) {
@@ -226,10 +276,13 @@ const App = () => {
           });
         }
 
-        const consolidationSuggestions = generateConsolidationSuggestions(sectionsByShipment, needed);
+        const newSuggestions = generateConsolidationSuggestions(
+          sectionsByShipment,
+          needed
+        );
 
         setConsignments(consignmentSummaries);
-        setMoves(consolidationSuggestions);
+        setSuggestions(newSuggestions);
         setRoutes(newRoutes);
         setRoutesNeeded(needed);
         setDraggedSection(null);
@@ -245,37 +298,63 @@ const App = () => {
       const shipment = row["Shipment"] || "";
       const cons = row["Consignment"] || "";
       const key = `${shipment}::${cons}`;
+
       const ambientTotes = parseTotes(row["Completed Totes - Ambient"]);
       const chilledTotes = parseTotes(row["Completed Totes - Chilled"]);
       const freezerTotes = parseTotes(row["Completed Totes - Freezer"]);
       const chillTotal = chilledTotes + freezerTotes;
 
       if (!consMap[key]) {
-        consMap[key] = { id: key, shipment, consignment: cons, ambientTotes: 0, chillTotes: 0 };
+        consMap[key] = {
+          id: key,
+          shipment,
+          consignment: cons,
+          ambientTotes: 0,
+          chillTotes: 0,
+        };
       }
       consMap[key].ambientTotes += ambientTotes;
       consMap[key].chillTotes += chillTotal;
 
-      if (!sectionsByShipment[shipment]) sectionsByShipment[shipment] = [];
-      if (ambientTotes > 0) {
-        sectionsByShipment[shipment].push({ sectionId: `${cons}::ambient`, consignment: cons, type: "ambient", totes: ambientTotes });
+      if (!sectionsByShipment[shipment]) {
+        sectionsByShipment[shipment] = [];
       }
+
+      if (ambientTotes > 0) {
+        sectionsByShipment[shipment].push({
+          sectionId: `${cons}_amb_${idx}`,
+          consignment: cons,
+          type: "ambient",
+          totes: ambientTotes,
+        });
+      }
+
       if (chillTotal > 0) {
-        sectionsByShipment[shipment].push({ sectionId: `${cons}::chill`, consignment: cons, type: "chill", totes: chillTotal });
+        sectionsByShipment[shipment].push({
+          sectionId: `${cons}_chi_${idx}`,
+          consignment: cons,
+          type: "chill",
+          totes: chillTotal,
+        });
       }
     });
 
-    return { consignmentSummaries: Object.values(consMap), sectionsByShipment };
+    return {
+      consignmentSummaries: Object.values(consMap),
+      sectionsByShipment,
+    };
   };
-
-  const ambientMoves = moves.filter((m) => m.type === "ambient");
-  const chillMoves = moves.filter((m) => m.type === "chill");
 
   const isSectionUsedAnywhere = (consignmentId, sectionType) => {
     return routes.some((route) =>
       route.subRoutes.some((sr) => {
-        const fromUsed = sr.from && sr.from.consignmentId === consignmentId && sr.from.type === sectionType;
-        const toUsed = sr.tos.some((t) => t.consignmentId === consignmentId && t.type === sectionType);
+        const fromUsed =
+          sr.from &&
+          sr.from.consignmentId === consignmentId &&
+          sr.from.type === sectionType;
+        const toUsed = sr.tos.some(
+          (t) => t.consignmentId === consignmentId && t.type === sectionType
+        );
         return fromUsed || toUsed;
       })
     );
@@ -286,12 +365,21 @@ const App = () => {
       <div className="app-inner">
         <header className="app-header">
           <h1>Consignment Consolidation Tool</h1>
-          <p className="app-subtitle">Upload a CSV file to view load data and plan routes.</p>
+          <p className="app-subtitle">
+            Upload a CSV file to view consignment loads, consolidation suggestions, and routes.
+          </p>
         </header>
 
         <div className="controls">
-          <input type="file" accept=".csv" onChange={handleFileChange} ref={fileInputRef} />
-          <button className="btn btn-secondary" onClick={handleClear}>Clear</button>
+          <input
+            type="file"
+            accept=".csv"
+            onChange={handleFileChange}
+            ref={fileInputRef}
+          />
+          <button className="btn btn-secondary" onClick={handleClear}>
+            Clear
+          </button>
         </div>
 
         {consignments.length > 0 && (
@@ -303,33 +391,56 @@ const App = () => {
                   <tr>
                     <th>Shipment</th>
                     <th>Consignment</th>
-                    <th>Ambient</th>
-                    <th>Chill+Frz</th>
+                    <th>Ambient totes</th>
+                    <th>Chill+Freezer totes</th>
                   </tr>
                 </thead>
                 <tbody>
                   {consignments.map((c) => {
-                    const ambientUsed = isSectionUsedAnywhere(c.consignment, "ambient");
-                    const chillUsed = isSectionUsedAnywhere(c.consignment, "chill");
+                    const ambientUsed = isSectionUsedAnywhere(
+                      c.consignment,
+                      "ambient"
+                    );
+                    const chillUsed = isSectionUsedAnywhere(
+                      c.consignment,
+                      "chill"
+                    );
+
                     return (
                       <tr key={c.id}>
                         <td>{c.shipment}</td>
                         <td className="consignment-cell">
                           {c.consignment}
-                          {(ambientUsed || chillUsed) && <span className="assigned-badge">✓</span>}
+                          {(ambientUsed || chillUsed) && (
+                            <span className="assigned-badge">✓</span>
+                          )}
                         </td>
+
                         <td
-                          className={`tote ${getColorClass(c.ambientTotes)} ${ambientUsed ? "assigned" : ""}`}
+                          className={`tote ${getColorClass(
+                            c.ambientTotes
+                          )} ${ambientUsed ? "assigned" : ""}`}
                           draggable
-                          onDragStart={() => handleDragStart(c.consignment, "ambient", c.ambientTotes)}
+                          onDragStart={() =>
+                            handleDragStart(c.consignment, "ambient", c.ambientTotes)
+                          }
+                          title="Drag ambient section to a route"
+                          style={{ cursor: "grab" }}
                         >
                           {c.ambientTotes}
                           {ambientUsed && <span className="tick-mark">✓</span>}
                         </td>
+
                         <td
-                          className={`tote ${getColorClass(c.chillTotes)} ${chillUsed ? "assigned" : ""}`}
+                          className={`tote ${getColorClass(
+                            c.chillTotes
+                          )} ${chillUsed ? "assigned" : ""}`}
                           draggable
-                          onDragStart={() => handleDragStart(c.consignment, "chill", c.chillTotes)}
+                          onDragStart={() =>
+                            handleDragStart(c.consignment, "chill", c.chillTotes)
+                          }
+                          title="Drag chill section to a route"
+                          style={{ cursor: "grab" }}
                         >
                           {c.chillTotes}
                           {chillUsed && <span className="tick-mark">✓</span>}
@@ -344,72 +455,161 @@ const App = () => {
             <div className="card card-right">
               <div className="right-columns">
                 <div className="panel routes-panel">
-                  <h3>Routes {routesNeeded > 0 ? `(Needed: ${routesNeeded})` : ""}</h3>
-                  <div className="routes-column">
-                    {routes.map((route) => (
-                      <div key={route.id} className="route-card">
-                        <div className="route-header">Route {route.id}</div>
-                        <div className="route-subroutes">
-                          {route.subRoutes.map((sr) => (
-                            <div key={sr.id} className="subroute-card">
-                              <div className="subroute-title">Sub‑route {sr.id}</div>
-                              <div className="from-to-row">
-                                <div className="subroute-slot from-slot" onDrop={() => handleDropOnFrom(route.id, sr.id)} onDragOver={handleDragOver}>
-                                  <div className="slot-label">From</div>
-                                  {sr.from ? (
-                                    <div className="slot-item from">
-                                      <span><strong>{sr.from.totes}</strong> Totes - {sr.from.consignmentId} ({sr.from.type})</span>
-                                      <button className="remove-btn" onClick={() => handleRemoveFromSubRoute(route.id, sr.id, sr.from.consignmentId, sr.from.type, "from")}>✕</button>
+                  <h3>
+                    Routes{" "}
+                    {routesNeeded > 0
+                      ? `(needed: ${routesNeeded})`
+                      : "(no consolidation routes needed)"}
+                  </h3>
+                  {routesNeeded === 0 ? (
+                    <p className="empty-text">
+                      Total consignments ≤ 9. No additional consolidation routes are required.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="grouping-subtitle">
+                        Each route has 2 sub‑routes. Drag one section into <strong>From</strong> and one or more into <strong>To</strong>.
+                      </p>
+                      <div className="routes-column">
+                        {routes.map((route) => (
+                          <div key={route.id} className="route-card">
+                            <div className="route-header">Route {route.id}</div>
+                            <div className="route-subroutes">
+                              {route.subRoutes.map((sr) => (
+                                <div key={sr.id} className="subroute-card">
+                                  <div className="subroute-title">
+                                    Sub‑route {sr.id}
+                                  </div>
+                                  <div className="from-to-row">
+                                    <div
+                                      className="subroute-slot from-slot"
+                                      onDrop={() =>
+                                        handleDropOnFrom(route.id, sr.id)
+                                      }
+                                      onDragOver={handleDragOver}
+                                    >
+                                      <div className="slot-label">From</div>
+                                      {sr.from ? (
+                                        <div className="slot-item from">
+                                          <span>
+                                            <strong>{sr.from.totes}</strong> Totes - {sr.from.consignmentId} (
+                                            {sr.from.type})
+                                          </span>
+                                          <button
+                                            className="remove-btn"
+                                            onClick={() =>
+                                              handleRemoveFromSubRoute(
+                                                route.id,
+                                                sr.id,
+                                                sr.from.consignmentId,
+                                                sr.from.type,
+                                                "from"
+                                              )
+                                            }
+                                            title="Remove from"
+                                          >
+                                            ✕
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div className="slot-empty">
+                                          Drop a section here
+                                        </div>
+                                      )}
                                     </div>
-                                  ) : <div className="slot-empty">Drop here</div>}
+
+                                    <div className="from-to-arrow">─────&gt;</div>
+
+                                    <div
+                                      className="subroute-slot to-slot"
+                                      onDrop={() =>
+                                        handleDropOnTo(route.id, sr.id)
+                                      }
+                                      onDragOver={handleDragOver}
+                                    >
+                                      <div className="slot-label">To</div>
+                                      {sr.tos.length === 0 ? (
+                                        <div className="slot-empty">
+                                          Drop sections here (multiple allowed)
+                                        </div>
+                                      ) : (
+                                        <ul className="slot-list">
+                                          {sr.tos.map((t, idx) => (
+                                            <li
+                                              key={`${t.consignmentId}-${t.type}-${idx}`}
+                                              className={`slot-item ${t.type}`}
+                                            >
+                                              <span>
+                                                <strong>{t.totes}</strong> Totes - {t.consignmentId} ({t.type})
+                                              </span>
+                                              <button
+                                                className="remove-btn"
+                                                onClick={() =>
+                                                  handleRemoveFromSubRoute(
+                                                    route.id,
+                                                    sr.id,
+                                                    t.consignmentId,
+                                                    t.type,
+                                                    "to"
+                                                  )
+                                                }
+                                                title="Remove to"
+                                              >
+                                                ✕
+                                              </button>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="from-to-arrow">→</div>
-                                <div className="subroute-slot to-slot" onDrop={() => handleDropOnTo(route.id, sr.id)} onDragOver={handleDragOver}>
-                                  <div className="slot-label">To</div>
-                                  {sr.tos.length > 0 ? (
-                                    <ul className="slot-list">
-                                      {sr.tos.map((t, idx) => (
-                                        <li key={idx} className={`slot-item ${t.type}`}>
-                                          <span><strong>{t.totes}</strong> Totes - {t.consignmentId} ({t.type})</span>
-                                          <button className="remove-btn" onClick={() => handleRemoveFromSubRoute(route.id, sr.id, t.consignmentId, t.type, "to")}>✕</button>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  ) : <div className="slot-empty">Drop here</div>}
-                                </div>
-                              </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="panel small-panel">
-                  <h3>Ambient Suggestions</h3>
-                  <table>
-                    <tbody>
-                      {ambientMoves.map((m, i) => (
-                        <tr key={i}>
-                          <td>{m.fromConsignment} ({m.fromSectionTotes}) → {m.toConsignment}</td>
+                  <h3>Consolidation Suggestions</h3>
+                  {suggestions.length === 0 ? (
+                    <p className="empty-text">
+                      No consolidation suggestions.
+                    </p>
+                  ) : (
+                    <table className="suggestion-table">
+                      <thead>
+                        <tr>
+                          <th>Move From</th>
+                          <th>To (Available Sections)</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="panel small-panel">
-                  <h3>Chill Suggestions</h3>
-                  <table>
-                    <tbody>
-                      {chillMoves.map((m, i) => (
-                        <tr key={i}>
-                          <td>{m.fromConsignment} ({m.fromSectionTotes}) → {m.toConsignment}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {suggestions.map((s, idx) => (
+                          <tr key={idx}>
+                            <td className="from-cell">
+                              <div className="cons-name">{s.sourceConsignment}</div>
+                              <div className="cons-meta">
+                                {s.sourceType} • <strong>{s.totalQty}</strong> totes
+                              </div>
+                            </td>
+                            <td className="to-cell">
+                              {s.moves.map((m, mIdx) => (
+                                <div key={mIdx} className="move-item">
+                                  <span className="arrow">↳</span>
+                                  <span className="qty-badge">{m.qty}</span>
+                                  <span> to <strong>{m.toConsignment}</strong> ({m.toType})</span>
+                                </div>
+                              ))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
             </div>
