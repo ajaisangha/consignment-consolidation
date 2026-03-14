@@ -2,13 +2,18 @@ import Papa from "papaparse";
 import React, { useState, useRef } from "react";
 import "./App.css";
 
-// Helper: parse "0/30" -> 30
+// Helper: parse cell like "0/30", "16/17", "Apr-32", "6-Jan" -> positive integer
 const parseTotes = (value) => {
-  if (!value) return 0;
-  const parts = String(value).split("/");
-  const denom = parts[1] ?? parts[0];
-  const n = parseInt(denom, 10);
-  return Number.isNaN(n) ? 0 : n;
+  if (value == null) return 0;
+  const str = String(value).trim();
+  if (!str) return 0;
+
+  // Find the first *positive* integer, ignore any minus signs
+  const match = str.match(/\d+/);
+  if (!match) return 0;
+
+  const n = Number(match[0]); // already digits only, so always base 10
+  return Number.isFinite(n) && n >= 0 ? n : 0;
 };
 
 // Helper: color based on totes
@@ -20,7 +25,7 @@ const getColorClass = (totes) => {
 
 const App = () => {
   const [consignments, setConsignments] = useState([]);
-  const [suggestions, setSuggestions] = useState([]); // Stores grouped suggestions
+  const [suggestions, setSuggestions] = useState([]);
   const [routes, setRoutes] = useState([]);
   const [draggedSection, setDraggedSection] = useState(null);
   const [routesNeeded, setRoutesNeeded] = useState(0);
@@ -109,7 +114,13 @@ const App = () => {
     setDraggedSection(null);
   };
 
-  const handleRemoveFromSubRoute = (routeId, subRouteId, consignmentId, type, role) => {
+  const handleRemoveFromSubRoute = (
+    routeId,
+    subRouteId,
+    consignmentId,
+    type,
+    role
+  ) => {
     setRoutes((prev) =>
       prev.map((route) => {
         if (route.id !== routeId) return route;
@@ -140,15 +151,13 @@ const App = () => {
     );
   };
 
-  // --- UPDATED LOGIC START ---
   const generateConsolidationSuggestions = (sectionsByShipment, routesNeeded) => {
     if (routesNeeded <= 0) return [];
 
     const MAX_CAPACITY = 40;
     const groupedSuggestions = [];
-    const usedSectionIds = new Set(); // Track globally used sections
+    const usedSectionIds = new Set();
 
-    // 1. Flatten into simulation array
     let allSections = [];
     Object.values(sectionsByShipment).forEach((sections) => {
       sections.forEach((section) => {
@@ -163,29 +172,27 @@ const App = () => {
       });
     });
 
-    // 2. Identify Sources: Smallest first
     allSections.sort((a, b) => a.totes - b.totes);
 
     const countToEmpty = routesNeeded * 2;
     const sources = [];
-    
-    // Pick the smallest sections as sources and mark them as used immediately
+
     for (let i = 0; i < allSections.length && sources.length < countToEmpty; i++) {
-        allSections[i].isSource = true;
-        usedSectionIds.add(allSections[i].id);
-        sources.push(allSections[i]);
+      allSections[i].isSource = true;
+      usedSectionIds.add(allSections[i].id);
+      sources.push(allSections[i]);
     }
 
-    // 3. Process each source to find targets
     sources.forEach((source) => {
       let totesToMove = source.totes;
       const moves = [];
 
       while (totesToMove > 0) {
-        // Targets must NOT be a source AND must NOT have been used as a target for another move yet
-        // This ensures a 1-to-1 or Many-to-1 relationship where a section is only touched once.
         let candidates = allSections.filter(
-          (s) => !s.isSource && !usedSectionIds.has(s.id) && s.simulatedTotes < MAX_CAPACITY
+          (s) =>
+            !s.isSource &&
+            !usedSectionIds.has(s.id) &&
+            s.simulatedTotes < MAX_CAPACITY
         );
 
         if (candidates.length === 0) {
@@ -198,13 +205,15 @@ const App = () => {
           break;
         }
 
-        candidates.forEach(c => {
+        candidates.forEach((c) => {
           c.spaceAvailable = MAX_CAPACITY - c.simulatedTotes;
         });
 
         let bestTarget = null;
-        let candidatesThatFitAll = candidates.filter(c => c.spaceAvailable >= totesToMove);
-        
+        let candidatesThatFitAll = candidates.filter(
+          (c) => c.spaceAvailable >= totesToMove
+        );
+
         if (candidatesThatFitAll.length > 0) {
           candidatesThatFitAll.sort((a, b) => a.spaceAvailable - b.spaceAvailable);
           bestTarget = candidatesThatFitAll[0];
@@ -215,15 +224,14 @@ const App = () => {
 
         if (bestTarget) {
           const moveAmount = Math.min(totesToMove, bestTarget.spaceAvailable);
-          
+
           moves.push({
             toConsignment: bestTarget.consignment,
             toType: bestTarget.type,
             qty: moveAmount,
-            newTotal: bestTarget.simulatedTotes + moveAmount
+            newTotal: bestTarget.simulatedTotes + moveAmount,
           });
 
-          // Mark this target as used so it cannot be a source or another target
           usedSectionIds.add(bestTarget.id);
           bestTarget.simulatedTotes += moveAmount;
           totesToMove -= moveAmount;
@@ -234,13 +242,12 @@ const App = () => {
         sourceConsignment: source.consignment,
         sourceType: source.type,
         totalQty: source.totes,
-        moves: moves
+        moves: moves,
       });
     });
 
     return groupedSuggestions;
   };
-  // --- UPDATED LOGIC END ---
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -422,7 +429,11 @@ const App = () => {
                           )} ${ambientUsed ? "assigned" : ""}`}
                           draggable
                           onDragStart={() =>
-                            handleDragStart(c.consignment, "ambient", c.ambientTotes)
+                            handleDragStart(
+                              c.consignment,
+                              "ambient",
+                              c.ambientTotes
+                            )
                           }
                           title="Drag ambient section to a route"
                           style={{ cursor: "grab" }}
@@ -437,7 +448,11 @@ const App = () => {
                           )} ${chillUsed ? "assigned" : ""}`}
                           draggable
                           onDragStart={() =>
-                            handleDragStart(c.consignment, "chill", c.chillTotes)
+                            handleDragStart(
+                              c.consignment,
+                              "chill",
+                              c.chillTotes
+                            )
                           }
                           title="Drag chill section to a route"
                           style={{ cursor: "grab" }}
@@ -492,8 +507,8 @@ const App = () => {
                                       {sr.from ? (
                                         <div className="slot-item from">
                                           <span>
-                                            <strong>{sr.from.totes}</strong> Totes - {sr.from.consignmentId} (
-                                            {sr.from.type})
+                                            <strong>{sr.from.totes}</strong> Totes -{" "}
+                                            {sr.from.consignmentId} ({sr.from.type})
                                           </span>
                                           <button
                                             className="remove-btn"
@@ -540,7 +555,8 @@ const App = () => {
                                               className={`slot-item ${t.type}`}
                                             >
                                               <span>
-                                                <strong>{t.totes}</strong> Totes - {t.consignmentId} ({t.type})
+                                                <strong>{t.totes}</strong> Totes -{" "}
+                                                {t.consignmentId} ({t.type})
                                               </span>
                                               <button
                                                 className="remove-btn"
@@ -576,9 +592,7 @@ const App = () => {
                 <div className="panel small-panel">
                   <h3>Consolidation Suggestions</h3>
                   {suggestions.length === 0 ? (
-                    <p className="empty-text">
-                      No consolidation suggestions.
-                    </p>
+                    <p className="empty-text">No consolidation suggestions.</p>
                   ) : (
                     <table className="suggestion-table">
                       <thead>
@@ -601,7 +615,10 @@ const App = () => {
                                 <div key={mIdx} className="move-item">
                                   <span className="arrow">↳</span>
                                   <span className="qty-badge">{m.qty}</span>
-                                  <span> to <strong>{m.toConsignment}</strong> ({m.toType})</span>
+                                  <span>
+                                    {" "}
+                                    to <strong>{m.toConsignment}</strong> ({m.toType})
+                                  </span>
                                 </div>
                               ))}
                             </td>
