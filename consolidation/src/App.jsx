@@ -2,17 +2,29 @@ import Papa from "papaparse";
 import React, { useState, useRef } from "react";
 import "./App.css";
 
-// Helper: parse cell like "0/30", "16/17", "Apr-32", "6-Jan" -> positive integer
-const parseTotes = (value) => {
+// Generic parser that can return either numerator or denominator
+// Examples (numerator / denominator):
+// "16/17" -> numerator=16, denominator=17
+// "0/7"   -> numerator=0,  denominator=7
+// "Apr-32" / "6-Jan" -> returns 32 or 6 as single number
+const parseTotes = (value, { useDenominator = false } = {}) => {
   if (value == null) return 0;
   const str = String(value).trim();
   if (!str) return 0;
 
-  // Find the first *positive* integer, ignore any minus signs
+  // If it looks like "A/B" (possibly with spaces) use numerator/denominator
+  const slashMatch = str.match(/(\d+)\s*\/\s*(\d+)/);
+  if (slashMatch) {
+    const numerator = Number(slashMatch[1]);
+    const denominator = Number(slashMatch[2]);
+    const n = useDenominator ? denominator : numerator;
+    return Number.isFinite(n) && n >= 0 ? n : 0;
+  }
+
+  // Otherwise: take the first positive integer in the string
   const match = str.match(/\d+/);
   if (!match) return 0;
-
-  const n = Number(match[0]); // already digits only, so always base 10
+  const n = Number(match[0]);
   return Number.isFinite(n) && n >= 0 ? n : 0;
 };
 
@@ -141,7 +153,8 @@ const App = () => {
               return {
                 ...sr,
                 tos: sr.tos.filter(
-                  (t) => !(t.consignmentId === consignmentId && t.type === type)
+                  (t) =>
+                    !(t.consignmentId === consignmentId && t.type === type)
                 ),
               };
             }
@@ -298,59 +311,68 @@ const App = () => {
   };
 
   const buildConsignmentsAndSections = (data) => {
-    const consMap = {};
-    const sectionsByShipment = {};
+  const consMap = {};
+  const sectionsByShipment = {};
 
-    data.forEach((row, idx) => {
-      const shipment = row["Shipment"] || "";
-      const cons = row["Consignment"] || "";
-      const key = `${shipment}::${cons}`;
+  data.forEach((row, idx) => {
+    const shipment = row["Shipment"] || "";
+    const cons = row["Consignment"] || "";
+    const key = `${shipment}::${cons}`;
 
-      const ambientTotes = parseTotes(row["Completed Totes - Ambient"]);
-      const chilledTotes = parseTotes(row["Completed Totes - Chilled"]);
-      const freezerTotes = parseTotes(row["Completed Totes - Freezer"]);
-      const chillTotal = chilledTotes + freezerTotes;
-
-      if (!consMap[key]) {
-        consMap[key] = {
-          id: key,
-          shipment,
-          consignment: cons,
-          ambientTotes: 0,
-          chillTotes: 0,
-        };
-      }
-      consMap[key].ambientTotes += ambientTotes;
-      consMap[key].chillTotes += chillTotal;
-
-      if (!sectionsByShipment[shipment]) {
-        sectionsByShipment[shipment] = [];
-      }
-
-      if (ambientTotes > 0) {
-        sectionsByShipment[shipment].push({
-          sectionId: `${cons}_amb_${idx}`,
-          consignment: cons,
-          type: "ambient",
-          totes: ambientTotes,
-        });
-      }
-
-      if (chillTotal > 0) {
-        sectionsByShipment[shipment].push({
-          sectionId: `${cons}_chi_${idx}`,
-          consignment: cons,
-          type: "chill",
-          totes: chillTotal,
-        });
-      }
+    // Ambient: now use denominator (total totes)
+    const ambientTotes = parseTotes(row["Completed Totes - Ambient"], {
+      useDenominator: true,
     });
 
-    return {
-      consignmentSummaries: Object.values(consMap),
-      sectionsByShipment,
-    };
+    // Chill & Freezer: still denominator (total totes)
+    const chilledTotes = parseTotes(row["Completed Totes - Chilled"], {
+      useDenominator: true,
+    });
+    const freezerTotes = parseTotes(row["Completed Totes - Freezer"], {
+      useDenominator: true,
+    });
+    const chillTotal = chilledTotes + freezerTotes;
+
+    if (!consMap[key]) {
+      consMap[key] = {
+        id: key,
+        shipment,
+        consignment: cons,
+        ambientTotes: 0,
+        chillTotes: 0,
+      };
+    }
+    consMap[key].ambientTotes += ambientTotes;
+    consMap[key].chillTotes += chillTotal;
+
+    if (!sectionsByShipment[shipment]) {
+      sectionsByShipment[shipment] = [];
+    }
+
+    if (ambientTotes > 0) {
+      sectionsByShipment[shipment].push({
+        sectionId: `${cons}_amb_${idx}`,
+        consignment: cons,
+        type: "ambient",
+        totes: ambientTotes,
+      });
+    }
+
+    if (chillTotal > 0) {
+      sectionsByShipment[shipment].push({
+        sectionId: `${cons}_chi_${idx}`,
+        consignment: cons,
+        type: "chill",
+        totes: chillTotal,
+      });
+    }
+  });
+
+  return {
+    consignmentSummaries: Object.values(consMap),
+    sectionsByShipment,
   };
+};
 
   const isSectionUsedAnywhere = (consignmentId, sectionType) => {
     return routes.some((route) =>
